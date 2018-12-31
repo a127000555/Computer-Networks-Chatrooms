@@ -19,6 +19,7 @@
 #include <sys/select.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
+#include <netdb.h>
 
 #include "json.hpp"
 
@@ -26,6 +27,11 @@
 #define MAX_DATALEN 8192 
 #define MAX_PARALLEL 4
 #define MAX_NAME_LEN 1024
+#define USERNAME_LEN 100
+#define PASSWORD_LEN 100
+#define MSG_LEN 1000
+#define CMD_LEN 10
+#define ID_LEN 9
 using json = nlohmann::json;
 
 struct user_info{
@@ -75,23 +81,25 @@ fd_set readset , retset;
 int main(int argc, char const *argv[])
 {
   if(argc != 2){
-    return -1 , fprintf(stderr, "usage : piepie-client [port]");
+    return -1 , fprintf(stderr, "usage : piepie-client [host]:[port]");
   }
-  fprintf(stderr, "Pie pie is so pie.");
+  fprintf(stderr, "Pie pie is so pie.\n");
+
   // init socket
+  // -----input:argv[1] -----
+  // -----output:sockfd -----
   sockfd = socket(AF_INET, SOCK_STREAM, 0);
-  // assert(socket );
   char *hostname = (char*)malloc(sizeof(char) * 200);
   char *port = (char*)malloc(sizeof(char) * 10);
-  int len = strlen(argv[2]);
+  int len = strlen(argv[1]);
   char *start = (char *)malloc(sizeof(char) * (len+1));
-  strcpy(start, argv[2]);
+  strcpy(start, argv[1]);
   start = strtok(start, split);
   strcpy(hostname, start);
   start = strtok(NULL, split);
   strcpy(port, start);
   htoip(hostname);
-  printf("%s:%s\n", hostname, port);
+  printf("Server is on %s:%s\n", hostname, port);
 
   struct sockaddr_in serverInfo;
   bzero(&serverInfo, sizeof(serverInfo));
@@ -99,6 +107,82 @@ int main(int argc, char const *argv[])
   serverInfo.sin_addr.s_addr = inet_addr(hostname);
   serverInfo.sin_port = htons(atoi(port));
   retval = connect(sockfd, (struct sockaddr *)&serverInfo, sizeof(serverInfo));
+  assert(retval >= 0);
+  fprintf(stderr, "Connection Success!\n");
+
+  // Some variable for chat room command
+  size_t cmd_len = CMD_LEN;
+  size_t target_len = ID_LEN;
+  size_t username_len = USERNAME_LEN;
+  size_t password_len = PASSWORD_LEN;
+  size_t msg_len = MSG_LEN; 
+  size_t vallen;
+  char* command = (char*)malloc(sizeof(char) * CMD_LEN);
+  char* username = (char*)malloc(sizeof(char) * USERNAME_LEN);
+  char* password = (char*)malloc(sizeof(char) * PASSWORD_LEN);
+  char* target = (char*)malloc(sizeof(char) * ID_LEN);
+  char* msg = (char*)malloc(sizeof(char) * MSG_LEN);
+  
+  // Chat room while
+  while (true) {
+    printf("[?] s - sign up\n");
+    printf("[?] l - login\n");
+    printf("[?] a - show users\n");
+    printf("[?] m - messaging\n");
+    printf("[?] r - refresh\n");
+    printf("command?\n[>]: ");
+
+    vallen = getline(&command, &cmd_len, stdin) - 1;
+    command[vallen] = '\0';
+    // printf("%d\n", vallen);
+    // fprintf(stderr, "%s\n", command);
+    
+    if (strcmp (command, "s") == 0) {
+      printf("\t[system] Sign up\n");
+      printf("username?\n[>]: ");
+      vallen=getline(&username, &username_len, stdin)-1;username[vallen] = '\0';
+
+      printf("password?\n[>]: ");
+      vallen=getline(&password, &password_len, stdin)-1;password[vallen] = '\0';
+
+      printf("\t[system] usr:%s pwd: %s\n", username, password);
+    } else if (strcmp(command,"l") == 0) {
+      printf("\t[system] Login\n");
+      printf("username?\n[>]: ");
+      vallen=getline(&username, &username_len, stdin)-1;username[vallen] = '\0';
+      printf("%zd", vallen);
+
+      printf("password?\n[>]: ");
+      vallen=getline(&password, &password_len, stdin)-1;password[vallen] = '\0';
+
+      printf("\t[system] usr:%s pws: %s\n", username, password);
+
+
+    } else if (strcmp(command,"a") == 0) {
+      printf("\t[system] Show user\n");
+
+    } else if (strcmp(command,"m") == 0) {
+      printf("\t[system] Messaging\n");
+      printf("to which id?\n[>]: ");
+      vallen=getline(&target, &target_len, stdin)-1;target[vallen]='\0';
+      printf("Say something\n[>]: ");
+      vallen=getline(&msg, &msg_len, stdin)-1;msg[vallen] = '\0';
+
+      printf("\t[system] id:%s msg: %s\n", target, msg);
+
+    } else if (strcmp(command,"r\n") == 0) {
+      printf("\t[system] Refresh\n");
+      printf("to which id?\n[>]: ");
+      vallen=getline(&target, &target_len, stdin)-1;target[vallen]='\0';
+
+      printf("\t[system] id:%s\n", target);
+    } else {
+      printf("\t[system] Command Not Found\n");
+    }
+
+    // printf("\033[%d;%dH", 0, 0);
+    printf("\n================\n");
+  }
 
   return 0;
 }
