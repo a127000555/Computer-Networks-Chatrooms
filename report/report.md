@@ -16,15 +16,17 @@ Computer Networks pRj2
 
 * Types of Opcode
 
-| opcode | details                                           |
-| ------ | ------------------------------------------------- |
-| s      | **Sing up**: send usr/pwd to register an account. |
-| l      | **Login** : send usr/pwd to login.                |
-| m      | **Messaging** : send a message.                   |
-| r      | **Refresh** : update message history.             |
-| u      | **Upload File** : Upload a file.                  |
-| d      | **Download file** : Download a file               |
-| !      | **Server message**                                |
+| opcode | details                                                      |
+| ------ | ------------------------------------------------------------ |
+| s      | **Sing up**: send usr/pwd to register an account.            |
+| l      | **Login** : send usr/pwd to login.                           |
+| m      | **Messaging** : send a message.                              |
+| r      | **Refresh** : update message history.                        |
+| u      | **Upload File** : Upload a file.                             |
+| d      | **Download file** : Download a file                          |
+| a      | **All user**: Show all user/ friend list/ black list of login account. |
+| x      | **Edit Friend / Black List** |
+| !      | **Server message**                                           |
 
 #### Sign up
 
@@ -65,21 +67,7 @@ Computer Networks pRj2
 {
     "status_code" : int,
     "state" : "string",
-    "data" : 
-    {
-        "user_list":[
-            ["id1","name1"],
-            ["id2","name2"]
-        ],
-        "friend_list":{
-            ["id1","name1"],
-            ["id2","name2"]
-        },
-        "black_list":{
-            ["id1","name1"],
-            ["id2","name2"]
-        }
-    }
+    "data" : {}
 }
 ```
 
@@ -175,6 +163,66 @@ Computer Networks pRj2
     "data" : [base64(file)]
 }
 ```
+
+#### Show All User
+
+#####  Request
+
+```json
+{
+    "target" : "string",
+    // b: blacklist, f: friend list, a: all user list.
+}
+```
+##### Response
+
+
+```json
+{
+    "status_code" : int,
+    "state" : "string",
+    "data" : 
+    {
+        "user_list":[
+            ["id1","name1"],
+            ["id2","name2"]
+        ],
+        "friend_list":{
+            ["id1","name1"],
+            ["id2","name2"]
+        },
+        "black_list":{
+            ["id1","name1"],
+            ["id2","name2"]
+        }
+    }
+}
+```
+
+#### Edit Black / Friend List
+
+#####  Request
+
+```json
+{
+    "op" : "string",
+    // add / delete
+    "target" : "int"
+}
+```
+
+##### Response
+
+
+```json
+{
+    "status_code" : int,
+    "state" : "string",
+    "data" : []
+}
+```
+
+
 ## User & Operator Guide
 
 ## How2Run?
