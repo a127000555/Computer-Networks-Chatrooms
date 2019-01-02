@@ -61,7 +61,7 @@ int CHATTING_TO; //chat to who
 
 void print_command_message()
 {
-  printf("\n====after status====%d\n", STATUS);
+  printf("\n=after status=%d\n", STATUS);
   printf("\n\n========PiePieChat========\n\n");
   switch(STATUS) {
     case IDLE:
@@ -80,17 +80,17 @@ void print_command_message()
       printf("command?\n[>]: ");
       break;
     case LIST: // choose people to chat
-      printf("[?] c - chat\n");
-      printf("[q] q - quit\n");
-      printf("command?\n[>]: ");
+      printf("[?] \"id\" - chat with who\n");
+      printf("[?] q - quit\n");
+      printf("id or quit?\n[>]: ");
       break;
     case ROOM:
-      printf("[?] t - typing\n");
+      printf("[?] \"msg\" - sending messaging\n");
       printf("[?] u - upload file\n");
       printf("[?] f - fetch file\n");
       printf("[?] r - refresh\n");
       printf("[?] q - quit\n");
-      printf("command?\n[>]: ");
+      printf("message or command?\n[>]: ");
       break;
     default:
       printf("System Error [+]: status%d\n", STATUS);
@@ -100,17 +100,18 @@ void print_command_message()
 }
 
 void state_machine(char input) {
-  printf("\n====before status====%d\n", STATUS);
+  printf("\n=before status=%d\n", STATUS);
   switch(STATUS) {
     case IDLE://0
       if (input=='l') STATUS = MAIN;
-      if (input=='s') STATUS = MAIN;
+      if (input=='s') STATUS = IDLE;
       break;
     case MAIN://1
       if (input=='m') STATUS = LIST;
       if (input=='e') STATUS = IDLE;
       break;
     case LIST://2
+      if (input=='c') STATUS = ROOM;
       if (input=='q') STATUS = MAIN;
       break;
     case ROOM://3
@@ -201,7 +202,7 @@ void login(int fd, const char* usr, const char* pwd)
   char json_content_res[mes_len_res]={'\0'};
   sz = recv(fd,json_content_res,mes_len_res,0);
   json_content_res[sz] = 0;
-  fprintf(stderr,"mes_len_res= %ld,json_content_res: %s\n",sz,json_content_res);
+  // fprintf(stderr,"mes_len_res= %ld,json_content_res: %s\n",sz,json_content_res);
   json j = json::parse(json_content_res);
   int status_code = j["status_code"].get<int>();
   std::string state = j["state"].get<std::string>();
@@ -345,76 +346,97 @@ int main(int argc, char const *argv[])
   char* password = (char*)malloc(sizeof(char) * PASSWORD_LEN);
   char* target = (char*)malloc(sizeof(char) * ID_LEN);
   char* msg = (char*)malloc(sizeof(char) * MSG_LEN);
-  int target_num; 
+  int target_num;
+  int goodbye = 0;
 
   // Chat room while
-  while (true) {
+  while (!goodbye) {
     print_command_message();
 
     vallen = getline(&command, &cmd_len, stdin) - 1;
     command[vallen] = '\0';
     // printf("%d\n", vallen);
     // fprintf(stderr, "%s\n", command);
-    
-    if (strcmp (command, "s") == 0) {
-      printf("\n========Sign up========\n\n");
-      printf("[+] username?\n[>]: ");
-      vallen=getline(&username, &username_len, stdin)-1;username[vallen] = '\0';
+    switch(STATUS) {
+    case IDLE:
+      if (strcmp (command, "s") == 0) {
 
-      printf("[+] password?\n[>]: ");
-      vallen=getline(&password, &password_len, stdin)-1;password[vallen] = '\0';
+        printf("\n========Sign up========\n\n");
+        printf("[+] username?\n[>]: ");
+        vallen=getline(&username, &username_len, stdin)-1;username[vallen] = '\0';
 
-      printf(" usr:%s pwd: %s\n", username, password);
-      sign_up(sockfd, username, password);
-    } else if (strcmp(command,"l") == 0) {
-      printf("\n========Login========\n\n");
-      printf("[+] username?\n[>]: ");
-      vallen=getline(&username, &username_len, stdin)-1;username[vallen] = '\0';
+        printf("[+] password?\n[>]: ");
+        vallen=getline(&password, &password_len, stdin)-1;password[vallen] = '\0';
 
-      printf("[+] password?\n[>]: ");
-      vallen=getline(&password, &password_len, stdin)-1;password[vallen] = '\0';
+        printf(" usr:%s pwd: %s\n", username, password);
+        sign_up(sockfd, username, password);
+      } else if (strcmp(command,"l") == 0) {
+        printf("\n========Login========\n\n");
+        printf("[+] username?\n[>]: ");
+        vallen=getline(&username, &username_len, stdin)-1;username[vallen] = '\0';
 
-      printf("[+] usr:%s pws: %s\n", username, password);
-      login(sockfd, username, password);
-    } else if (strcmp(command,"a") == 0) {
-      printf("[+] Show user\n");
-    } else if (strcmp(command,"m") == 0) {
-      state_machine('m');
-    } else if (strcmp(command,"c") == 0) {
-      printf("[+] to which id?\n[>]: ");
-      vallen=getline(&target, &target_len, stdin)-1;target[vallen]='\0';
-      printf("[+] Say something\n[>]: ");
-      vallen=getline(&msg, &msg_len, stdin)-1;msg[vallen] = '\0';
-      target_num = atoi(target);
+        printf("[+] password?\n[>]: ");
+        vallen=getline(&password, &password_len, stdin)-1;password[vallen] = '\0';
 
-      printf("[+] id:%d msg: %s\n", target_num, msg);
-      if (target_num > 0) {
-        messaging(sockfd, target_num, msg);
-      } else {
-        fprintf(stderr, "[+] Target not found!\n");
+        printf("[+] usr:%s pws: %s\n", username, password);
+        login(sockfd, username, password);
+      } else if (strcmp(command,"g") == 0) {
+        close(sockfd);
+        goodbye = 1;
+        printf("[+] ByeBye~~\n");
       }
-    } else if (strcmp(command,"r") == 0) {
-      printf("\n========Refresh========\n\n");
-      printf("[+] to which id?\n[>]: ");
-      vallen=getline(&target, &target_len, stdin)-1;target[vallen]='\0';
-      target_num = atoi(target);
-
-      printf("[+] id:%d\n", target_num);
-      if (target_num > 0) {
-        refresh(sockfd, target_num, 0, 0);
-      } else {
-        fprintf(stderr, "[+] Target not found!\n");
-      }
-    }else if (strcmp(command, "e") == 0) { 
-      state_machine('e');
-    }else if (strcmp(command, "q") == 0) {
-      state_machine('q');
-    } else if (strcmp(command, "g") == 0) {
-      close(sockfd);
-      printf("[+] ByeBye~~\n");
       break;
-    } else {
-      printf("[+] Command Not Found!\n");
+    case MAIN:
+      if (strcmp(command,"m") == 0) {
+        state_machine('m');
+      } else if (strcmp(command, "x") == 0) {
+        //edit list
+      } else if (strcmp(command,"a") == 0) {
+        printf("[+] Show user\n");
+      } else if (strcmp(command,"d") == 0) {
+        //show friends
+      } else if (strcmp(command,"b") == 0) {
+        //show blacklist
+      } else if (strcmp(command,"e") == 0) { 
+        state_machine('e');
+      }
+      break;
+    case LIST:
+      if (strcmp(command,"q") == 0) {
+        state_machine('q');
+      } else {
+        // vallen=getline(&target, &target_len, stdin)-1;target[vallen]='\0';
+        // printf("[+] Say something\n[>]: ");
+        // vallen=getline(&msg, &msg_len, stdin)-1;msg[vallen] = '\0';
+        target_num = atoi(command);
+        printf("[+] id:%d\n", target_num);
+        if (target_num > 0) {
+          CHATTING_TO = target_num;
+          state_machine('c');
+        } else {
+          fprintf(stderr, "[+] Target not found!\n");
+        }
+      }
+      break;
+    case ROOM:
+      if (strcmp(command,"r") == 0) {
+        printf("\n========Refresh========\n\n");
+        refresh(sockfd, CHATTING_TO, 0, 0);
+      } else if (strcmp(command,"u") == 0) {
+        //upload file
+      } else if (strcmp(command,"f") == 0) {
+        //fetch file
+      } else if (strcmp(command,"q") == 0) {
+        CHATTING_TO = 0;
+        state_machine('q');
+      } else {
+        printf("[+] id:%d msg: %s\n", target_num, command);
+        messaging(sockfd, CHATTING_TO, command);
+      }
+      break;
+    default:
+      printf("System Error [+]: state%d\n", STATUS);
+      break;
     }
 
     // printf("\033[%d;%dH", 0, 0);
@@ -423,6 +445,5 @@ int main(int argc, char const *argv[])
     // }
     // printf("\033[%d;%dH", 0, 0);
   }
-
   return 0;
 }
