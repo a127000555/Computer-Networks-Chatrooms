@@ -20,24 +20,24 @@
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <netdb.h>
+#include <iomanip>
 
 #include "json.hpp"
 #include "base64.h"
 
 #define MAX_FD 1024
 #define MAX_DATALEN 8192 
-#define MAX_PARALLEL 4
-#define MAX_NAME_LEN 1024
 #define USERNAME_LEN 100
 #define PASSWORD_LEN 100
-#define MSG_LEN 1000
+#define MSG_LEN 1024
 #define CMD_LEN 10
 #define ID_LEN 9
 
 #define IDLE 0
 #define MAIN 1
 #define LIST 2
-#define ROOM 3
+#define CHOOSE 3
+#define ROOM 4
 
 using json = nlohmann::json;
 
@@ -61,36 +61,48 @@ int CHATTING_TO; //chat to who
 
 void print_command_message()
 {
-  printf("\n=after status=%d\n", STATUS);
-  printf("\n\n========PiePieChat========\n\n");
+  // printf("\n=after status=%d\n", STATUS);
+
   switch(STATUS) {
     case IDLE:
+      printf("\n========PiePieChat========\n\n");
       printf("[?] s - sign up\n");
       printf("[?] l - login\n");
       printf("[?] g - good bye\n");
-      printf("command?\n[>]: ");
+      printf("[+] Command?\n[>]: ");
       break;
     case MAIN:
+      printf("\n========PiePieChat========\n\n");
       printf("[?] m - messaging\n");
+      printf("[?] t - show lists\n");
       printf("[?] x - edit friend/black list -> not\n");
-      printf("[?] a - show users -> not\n"); 
-      printf("[?] d - show friends -> not\n");
-      printf("[?] b - show black list -> not\n");
-      printf("[?] e - logout\n");
-      printf("command?\n[>]: ");
+      printf("[?] e - logout -> maybe don't have to close process\n");
+      printf("[+] Command?\n[>]: ");
       break;
-    case LIST: // choose people to chat
+    case LIST:
+      printf("\n==========Lists===========\n\n");
+      printf("[?] a - show users\n"); 
+      printf("[?] d - show friends\n");
+      printf("[?] b - show black list\n");
+      printf("[?] m - messaging\n");
+      printf("[?] q - quit\n");
+      printf("[+] Command?\n[>]: ");
+      break;
+    case CHOOSE: // choose people to chat
+      printf("\n===========Who============\n\n");
       printf("[?] \"id\" - chat with who\n");
       printf("[?] q - quit\n");
-      printf("id or quit?\n[>]: ");
+      printf("[+] ID or Quit?\n[>]: ");
+      // printf("[+] Chat with who?\n[>]: ");
       break;
     case ROOM:
+      printf("\n===========Chat===========\n\n");
       printf("[?] \"msg\" - sending messaging\n");
       printf("[?] u - upload file\n");
       printf("[?] f - fetch file\n");
       printf("[?] r - refresh\n");
       printf("[?] q - quit\n");
-      printf("message or command?\n[>]: ");
+      printf("[+] MSG or Command?\n[>]: ");
       break;
     default:
       printf("System Error [+]: status%d\n", STATUS);
@@ -99,29 +111,32 @@ void print_command_message()
   
 }
 
-void state_machine(char input) {
-  printf("\n=before status=%d\n", STATUS);
-  switch(STATUS) {
-    case IDLE://0
-      if (input=='l') STATUS = MAIN;
-      if (input=='s') STATUS = IDLE;
-      break;
-    case MAIN://1
-      if (input=='m') STATUS = LIST;
-      if (input=='e') STATUS = IDLE;
-      break;
-    case LIST://2
-      if (input=='c') STATUS = ROOM;
-      if (input=='q') STATUS = MAIN;
-      break;
-    case ROOM://3
-      if (input=='q') STATUS = LIST;
-      break;
-    default:
-      printf("System Error [+]: state%d\n", STATUS);
-      break;
-  }
-}
+// void state_machine(char input) {
+//   printf("\n=before status=%d\n", STATUS);
+//   switch(STATUS) {
+//     case IDLE://0
+//       if (input=='l') STATUS = MAIN;
+//       if (input=='s') STATUS = IDLE;
+//       break;
+//     case MAIN://1
+//       if (input=='m') STATUS = CHOOSE;
+//       if (input=='e') STATUS = IDLE;
+//       if (input=='t') STATUS = LIST;
+//       break;
+//     case LIST:
+//       break;
+//     case CHOOSE://3
+//       if (input=='c') STATUS = ROOM;
+//       if (input=='q') STATUS = MAIN;
+//       break;
+//     case ROOM://3
+//       if (input=='q') STATUS = MAIN;
+//       break;
+//     default:
+//       printf("System Error [+]: state%d\n", STATUS);
+//       break;
+//   }
+// }
 
 void htoip(char *hostname) 
 {   
@@ -138,20 +153,18 @@ void htoip(char *hostname)
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
         return;
     }
- 
     // loop through all the results and connect to the first we can
     for(p = servinfo; p != NULL; p = p->ai_next) {
         h = (struct sockaddr_in *) p->ai_addr;
         strcpy(hostname, inet_ntoa(h->sin_addr));
     }
-     
     freeaddrinfo(servinfo);
 }
 
 
 void sign_up(int fd,const char* usr, const char* pwd)
 {
-  char json_content_req[8192];
+  char json_content_req[MAX_DATALEN];
   sprintf(json_content_req,"{\"username\":\"%s\",\"password\":\"%s\"}",usr,pwd);
   unsigned long long msg_len_req = strlen(json_content_req);
   char uni_pkt_req[10]="s";
@@ -175,19 +188,43 @@ void sign_up(int fd,const char* usr, const char* pwd)
   json j = json::parse(json_content_res);
   int status_code = j["status_code"].get<int>();
   std::string state = j["state"].get<std::string>();
-  std::cout << "[+] " << state;
-
-  if (status_code == 200) {
-    state_machine('s');
-  }
+  std::cout << "[+] " << state << std::endl;
 }
 
-void login(int fd, const char* usr, const char* pwd)
+int login(int fd, const char* usr, const char* pwd)
 {
-  char json_content_req[8192];
+  char json_content_req[MAX_DATALEN];
   sprintf(json_content_req,"{\"username\":\"%s\",\"password\":\"%s\"}",usr,pwd);
   unsigned long long msg_len_req = strlen(json_content_req);
   char uni_pkt_req[10]="l";
+  *(unsigned long long *)(uni_pkt_req+1) = msg_len_req;
+  send(fd,uni_pkt_req,9,0);
+  send(fd,json_content_req, msg_len_req,0);
+
+  char uni_pkt_res[10];
+  ssize_t sz = recv(fd,uni_pkt_res,9,0);
+  if (sz == 0){
+    return -1;
+  }
+    // fprintf(stderr,"%s\n",uni_pkt_res);
+  unsigned long long mes_len_res = *((unsigned long long *)(uni_pkt_res+1));
+  char json_content_res[mes_len_res]={'\0'};
+  sz = recv(fd,json_content_res,mes_len_res,0);
+  json_content_res[sz] = 0;
+  // fprintf(stderr,"mes_len_res= %ld,json_content_res: %s\n",sz,json_content_res);
+  json j = json::parse(json_content_res);
+  int status_code = j["status_code"].get<int>();
+  std::string state = j["state"].get<std::string>();
+  std::cout << "[+] " << state << std::endl;;
+
+  return status_code;
+}
+
+void get_list(int fd, char target) {
+  char json_content_req[MAX_DATALEN];
+  sprintf(json_content_req,"{\"target\":\"%c\"}",target);
+  unsigned long long msg_len_req = strlen(json_content_req);
+  char uni_pkt_req[10]="a";
   *(unsigned long long *)(uni_pkt_req+1) = msg_len_req;
   send(fd,uni_pkt_req,9,0);
   send(fd,json_content_req, msg_len_req,0);
@@ -204,31 +241,23 @@ void login(int fd, const char* usr, const char* pwd)
   json_content_res[sz] = 0;
   // fprintf(stderr,"mes_len_res= %ld,json_content_res: %s\n",sz,json_content_res);
   json j = json::parse(json_content_res);
-  int status_code = j["status_code"].get<int>();
-  std::string state = j["state"].get<std::string>();
-  std::cout << "[+] " << state;
-  if (status_code == 200) {
-    // char uni_pkt_res2[10];
-    // sz = recv(fd,uni_pkt_res2,9,0);
-    // if (sz != 0){
-    //   // fprintf(stderr,"%s\n",uni_pkt_res2);
-    //   unsigned long long mes_len_res2 = *((unsigned long long *)(uni_pkt_res2+1));
-    //   char json_content_res2[mes_len_res2]={'\0'};
-    //   sz = recv(fd,json_content_res2,mes_len_res2,0);
-    //   json_content_res2[sz] = 0;
-    //   fprintf(stderr,"mes_len_res2= %ld,json_content_res2: %s\n",sz,json_content_res2);
-    //   json user_info = json::parse(json_content_res2);
-    //   std::string state = user_info["data"]["user_list"].get<std::string>();
-    //   std::cout << "[+] " << state;
-    // }
+  std::cout << j << std::endl;
 
-    state_machine('l');
+  int id = 0;
+  printf("\n=========List=========\n");
+  for(auto x : j["data"]){
+    // std::cout << x << std::endl;
+    id = x[0].get<int>();
+    std::string name = x[1].get<std::string>();
+    std::cout << std::left << std::setw(20) <<  name << std::left << std::setw(5) << id << std::endl;
   }
+  printf("=======List END=======\n");
+
 }
 
 void messaging(int fd, int target, const char* message)
 {
-  // char json_content_req[8192];
+  // char json_content_req[MAX_DATALEN];
   std::string message_str(message);
   // std::cout << message_str << std::endl;
   std::string encoded_message_str = base64_encode(reinterpret_cast<const unsigned char*>(message_str.c_str()), message_str.length());
@@ -258,13 +287,12 @@ void messaging(int fd, int target, const char* message)
   // fprintf(stderr,"mes_len_res= %ld,json_content_res: %s\n",sz,json_content_res);
   json j = json::parse(json_content_res);
   std::string state = j["state"].get<std::string>();
-  std::cout << "[+] " << state;
-
+  std::cout << "[+] " << state << std::endl;;
 }
 
 void refresh(int fd, int target, int start, int end) 
 {
-  char json_content_req[8192];
+  char json_content_req[MAX_DATALEN];
   sprintf(json_content_req,"{\"target\":%d,\"start_from\":%d,\"end_to\":%d}",target,start,end);
   unsigned long long msg_len_req = strlen(json_content_req);
   char uni_pkt_req[10]="r";
@@ -298,6 +326,11 @@ void refresh(int fd, int target, int start, int end)
     int who = x[1]["who"].get<int>();
     std::cout << "[" << line_num << "]user" << who << ": " << decoded_message << std::endl;
   }
+}
+
+void input(char *buf, size_t len) {
+  int val = getline(&buf, &len, stdin)-1;
+  buf[val] = '\0';
 }
 
 int main(int argc, char const *argv[])
@@ -335,90 +368,111 @@ int main(int argc, char const *argv[])
   fprintf(stderr, "Connection Success!\n");
 
   // Some variable for chat room command
-  size_t cmd_len = CMD_LEN;
-  size_t target_len = ID_LEN;
-  size_t username_len = USERNAME_LEN;
-  size_t password_len = PASSWORD_LEN;
-  size_t msg_len = MSG_LEN; 
-  size_t vallen;
   char* command = (char*)malloc(sizeof(char) * CMD_LEN);
   char* username = (char*)malloc(sizeof(char) * USERNAME_LEN);
   char* password = (char*)malloc(sizeof(char) * PASSWORD_LEN);
   char* target = (char*)malloc(sizeof(char) * ID_LEN);
   char* msg = (char*)malloc(sizeof(char) * MSG_LEN);
   int target_num;
+
+  // Flag for ending while loop
   int goodbye = 0;
 
   // Chat room while
   while (!goodbye) {
     print_command_message();
 
-    vallen = getline(&command, &cmd_len, stdin) - 1;
-    command[vallen] = '\0';
-    // printf("%d\n", vallen);
-    // fprintf(stderr, "%s\n", command);
     switch(STATUS) {
     case IDLE:
+      input(command, CMD_LEN);
       if (strcmp (command, "s") == 0) {
-
-        printf("\n========Sign up========\n\n");
+        printf("\n=========Sign Up==========\n\n");
         printf("[+] username?\n[>]: ");
-        vallen=getline(&username, &username_len, stdin)-1;username[vallen] = '\0';
+        input(username, USERNAME_LEN);
 
         printf("[+] password?\n[>]: ");
-        vallen=getline(&password, &password_len, stdin)-1;password[vallen] = '\0';
+        input(password, PASSWORD_LEN);
 
         printf(" usr:%s pwd: %s\n", username, password);
         sign_up(sockfd, username, password);
       } else if (strcmp(command,"l") == 0) {
-        printf("\n========Login========\n\n");
+        printf("\n==========Login===========\n\n");
         printf("[+] username?\n[>]: ");
-        vallen=getline(&username, &username_len, stdin)-1;username[vallen] = '\0';
+        input(username, USERNAME_LEN);
 
         printf("[+] password?\n[>]: ");
-        vallen=getline(&password, &password_len, stdin)-1;password[vallen] = '\0';
+        input(password, PASSWORD_LEN);
 
-        printf("[+] usr:%s pws: %s\n", username, password);
-        login(sockfd, username, password);
+        printf(" usr:%s pws: %s\n", username, password);
+        int status_code = login(sockfd, username, password);
+
+        if (status_code == 200) {
+          STATUS = MAIN;
+        }
       } else if (strcmp(command,"g") == 0) {
+        printf("\n========PiePieChat========\n");
         close(sockfd);
         goodbye = 1;
         printf("[+] ByeBye~~\n");
+      } else {
+        printf("[+] Command not found!\n");
       }
       break;
     case MAIN:
+      input(command, CMD_LEN);
       if (strcmp(command,"m") == 0) {
-        state_machine('m');
+        STATUS = CHOOSE;
       } else if (strcmp(command, "x") == 0) {
         //edit list
-      } else if (strcmp(command,"a") == 0) {
-        printf("[+] Show user\n");
-      } else if (strcmp(command,"d") == 0) {
-        //show friends
-      } else if (strcmp(command,"b") == 0) {
-        //show blacklist
+      } else if (strcmp(command,"t") == 0) {
+        STATUS = LIST;
       } else if (strcmp(command,"e") == 0) { 
-        state_machine('e');
+        STATUS = IDLE;
+        close(sockfd);
+        goodbye = 1;
+        printf("[+] ByeBye~~\n");
+      } else {
+        printf("[+] Command not found!\n");
       }
       break;
     case LIST:
-      if (strcmp(command,"q") == 0) {
-        state_machine('q');
+      input(command, CMD_LEN);
+      if (strcmp(command,"m") == 0) {
+        STATUS = CHOOSE;
+      } else if (strcmp(command,"a") == 0) {
+        //show friends
+        printf("[+] Show user\n");
+        get_list(sockfd, 'a');
+      } else if (strcmp(command,"d") == 0) {
+        //show friends
+        get_list(sockfd, 'f');
+      } else if (strcmp(command,"b") == 0) {
+        //show blacklist
+        get_list(sockfd, 'b');
+      } else if (strcmp(command, "q") == 0) {
+        STATUS = MAIN;
       } else {
-        // vallen=getline(&target, &target_len, stdin)-1;target[vallen]='\0';
-        // printf("[+] Say something\n[>]: ");
-        // vallen=getline(&msg, &msg_len, stdin)-1;msg[vallen] = '\0';
+        printf("[+] Command not found!\n");
+      }
+      break;
+    case CHOOSE:
+      input(command, ID_LEN);
+      if (strcmp(command,"q") == 0) {
+        STATUS = MAIN;
+      } else {
         target_num = atoi(command);
         printf("[+] id:%d\n", target_num);
         if (target_num > 0) {
           CHATTING_TO = target_num;
-          state_machine('c');
+          STATUS = ROOM;
+          refresh(sockfd, CHATTING_TO, 0, 0);
         } else {
           fprintf(stderr, "[+] Target not found!\n");
         }
       }
       break;
     case ROOM:
+      input(command, MSG_LEN);
       if (strcmp(command,"r") == 0) {
         printf("\n========Refresh========\n\n");
         refresh(sockfd, CHATTING_TO, 0, 0);
@@ -428,10 +482,11 @@ int main(int argc, char const *argv[])
         //fetch file
       } else if (strcmp(command,"q") == 0) {
         CHATTING_TO = 0;
-        state_machine('q');
+        STATUS = MAIN;
       } else {
         printf("[+] id:%d msg: %s\n", target_num, command);
         messaging(sockfd, CHATTING_TO, command);
+        refresh(sockfd, CHATTING_TO, 0, 0);
       }
       break;
     default:
