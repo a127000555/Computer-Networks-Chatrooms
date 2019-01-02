@@ -171,7 +171,7 @@ Computer Networks pRj2
 ```json
 {
     "target" : "string",
-    // b: blacklist, f: friend list, a: all user list.
+    // b: blak_list, f: friend_list, a: user_list.
 }
 ```
 ##### Response
@@ -181,21 +181,11 @@ Computer Networks pRj2
 {
     "status_code" : int,
     "state" : "string",
-    "data" : 
-    {
-        "user_list":[
-            ["id1","name1"],
-            ["id2","name2"]
-        ],
-        "friend_list":{
-            ["id1","name1"],
-            ["id2","name2"]
-        },
-        "black_list":{
-            ["id1","name1"],
-            ["id2","name2"]
-        }
-    }
+    "data" :
+    [
+        ["id1","name1"],
+        ["id2","name2"]
+    ]
 }
 ```
 
