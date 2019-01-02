@@ -23,11 +23,9 @@ void initiailization(){
 	}
 }
 void sign_up(int fd,int len){
-	char json_content[len]={'\0'};
-	ssize_t sz = recv(fd,json_content,len,0);
-	json_content[sz] = 0;
-	fprintf(stderr,"len= %ld,json_content: %s\n",sz,json_content);
-	json j = json::parse(json_content);
+	json j = recv_client_data(fd,len);
+	if(client_status[fd] == 'U') return;
+
 	std::string username = j["username"].get<std::string>();
 	std::string password = j["password"].get<std::string>();
 	if(username_to_id.find(username) == username_to_id.end()){
@@ -52,13 +50,9 @@ void sign_up(int fd,int len){
 	}
 }
 void send_talking_list(int fd,int len){
+	json j = recv_client_data(fd,len);
+	if(client_status[fd] == 'U') return;
 	struct user_info *u = all_users.find(client_fd_to_id[fd])->second;
-
-	char json_content[len]={'\0'};
-	ssize_t sz = recv(fd,json_content,len,0);
-	json_content[sz] = 0;
-	fprintf(stderr,"len= %ld,json_content: %s\n",sz,json_content);
-	json j = json::parse(json_content);
 	std::string target = j["target"].get<std::string>();
 	std::vector<json> out;
 	for (const auto& kv : all_users) {
@@ -73,11 +67,8 @@ void send_talking_list(int fd,int len){
 	response_client(fd,200,"fetch list successfully.",out);
 }
 void login(int fd,int len){
-	char json_content[len]={'\0'};
-	ssize_t sz = recv(fd,json_content,len,0);
-	json_content[sz] = 0;
-	fprintf(stderr,"len= %ld,json_content: %s\n",sz,json_content);
-	json j = json::parse(json_content);
+	json j = recv_client_data(fd,len);
+	if(client_status[fd] == 'U') return;
 	std::string username = j["username"].get<std::string>();
 	std::string password = j["password"].get<std::string>();
 	if(client_status[fd] == 'L'){
@@ -99,11 +90,8 @@ void login(int fd,int len){
 	}
 }
 void messaging(int fd,int len){
-	char json_content[len]={'\0'};
-	ssize_t sz = recv(fd,json_content,len,0);
-	json_content[sz] = 0;
-	fprintf(stderr,"len= %ld,json_content: %s\n",sz,json_content);
-	json j = json::parse(json_content);
+	json j = recv_client_data(fd,len);
+	if(client_status[fd] == 'U') return;
 	int target = j["target"].get<int>();
 	std::string type = j["type"].get<std::string>();
 	std::string message = j["message"].get<std::string>();
@@ -119,11 +107,8 @@ void messaging(int fd,int len){
 	}
 }
 void refresh(int fd,int len){
-	char json_content[len]={'\0'};
-	ssize_t sz = recv(fd,json_content,len,0);
-	json_content[sz] = 0;
-	fprintf(stderr,"len= %ld,json_content: %s\n",sz,json_content);
-	json j = json::parse(json_content);
+	json j = recv_client_data(fd,len);
+	if(client_status[fd] == 'U') return;
 	int target = j["target"].get<int>();
 	int start_from= j["start_from"].get<int>();
 	int end_to= j["end_to"].get<int>();

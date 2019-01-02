@@ -27,3 +27,13 @@ void finalize_client(int fd){
 	printf("\t\t\t[system] fd(%d) set to U (unconnection)\n",fd);
 
 }
+json recv_client_data(int fd,int len){
+	char json_content[len]={'\0'};
+	ssize_t sz = recv(fd,json_content,len,0);
+	if(sz == 0){
+		finalize_client(fd);
+	}
+	json_content[sz] = 0;
+	fprintf(stderr,"len= %ld,json_content: %s\n",sz,json_content);
+	return json::parse(json_content);
+}
