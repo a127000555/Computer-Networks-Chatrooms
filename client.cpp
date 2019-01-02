@@ -70,21 +70,26 @@ void print_command_message()
       printf("command?\n[>]: ");
       break;
     case MAIN:
-      printf("[?]  - messaging\n");
-      printf("[?] x - edit friend/black list\n")
-      printf("[?] \n");
-      printf("[?] e - logout");
+      printf("[?] m - messaging\n");
+      printf("[?] x - edit friend/black list -> not\n");
+      printf("[?] a - show users -> not\n"); 
+      printf("[?] d - show friends -> not\n");
+      printf("[?] b - show black list -> not\n");
+      printf("[?] e - logout\n");
       printf("command?\n[>]: ");
       break;
-    case LIST:
-      printf("[?] a - show users\n");
-      printf("[?] f - show friends\n");
-      printf("[?] b - show black list\n");
-      printf("[?]  - cha\n", );
+    case LIST: // choose people to chat
+      printf("[?] c - chat\n");
+      printf("[q] q - quit\n");
       printf("command?\n[>]: ");
       break;
     case ROOM:
+      printf("[?] t - typing\n");
+      printf("[?] u - upload file\n");
+      printf("[?] f - fetch file\n");
       printf("[?] r - refresh\n");
+      printf("[?] q - quit\n");
+      printf("command?\n[>]: ");
       break;
     default:
       printf("System Error [+]: status%d\n", STATUS);
@@ -94,17 +99,20 @@ void print_command_message()
 }
 
 void state_machine(char input) {
+  printf("\n====status====%d\n", STATUS);
   switch(STATUS) {
-    case IDLE:
+    case IDLE://0
       if (input=='l') STATUS = MAIN;
       if (input=='s') STATUS = MAIN;
       break;
-    case MAIN:
-      if (input=='m') STATUS = LIST
+    case MAIN://1
+      if (input=='m') STATUS = LIST;
       break;
-    case LIST:
+    case LIST://2
+      if (input=='q') STATUS = MAIN;
       break;
-    case ROOM:
+    case ROOM://3
+      if (input=='q') STATUS = LIST;
       break;
     default:
       printf("System Error [+]: state%d\n", STATUS);
@@ -195,23 +203,21 @@ void login(int fd, const char* usr, const char* pwd)
   json j = json::parse(json_content_res);
   int status_code = j["status_code"].get<int>();
   std::string state = j["state"].get<std::string>();
-
   std::cout << "[+] " << state;
-
   if (status_code == 200) {
-    char uni_pkt_res2[10];
-    sz = recv(fd,uni_pkt_res2,9,0);
-    if (sz != 0){
-      // fprintf(stderr,"%s\n",uni_pkt_res2);
-      unsigned long long mes_len_res2 = *((unsigned long long *)(uni_pkt_res2+1));
-      char json_content_res2[mes_len_res2]={'\0'};
-      sz = recv(fd,json_content_res2,mes_len_res2,0);
-      json_content_res2[sz] = 0;
-      fprintf(stderr,"mes_len_res2= %ld,json_content_res2: %s\n",sz,json_content_res2);
-      json user_info = json::parse(json_content_res2);
-      // std::string state = user_info["data"]["user_list"].get<std::string>();
-      // std::cout << "[+] " << state;
-    }
+    // char uni_pkt_res2[10];
+    // sz = recv(fd,uni_pkt_res2,9,0);
+    // if (sz != 0){
+    //   // fprintf(stderr,"%s\n",uni_pkt_res2);
+    //   unsigned long long mes_len_res2 = *((unsigned long long *)(uni_pkt_res2+1));
+    //   char json_content_res2[mes_len_res2]={'\0'};
+    //   sz = recv(fd,json_content_res2,mes_len_res2,0);
+    //   json_content_res2[sz] = 0;
+    //   fprintf(stderr,"mes_len_res2= %ld,json_content_res2: %s\n",sz,json_content_res2);
+    //   json user_info = json::parse(json_content_res2);
+    //   std::string state = user_info["data"]["user_list"].get<std::string>();
+    //   std::cout << "[+] " << state;
+    // }
 
     state_machine('l');
   }
@@ -370,11 +376,9 @@ int main(int argc, char const *argv[])
       login(sockfd, username, password);
     } else if (strcmp(command,"a") == 0) {
       printf("[+] Show user\n");
-
     } else if (strcmp(command,"m") == 0) {
-      printf("\n========Messaging========\n\n");
-      state_machine("m");
-    }
+      state_machine('m');
+    } else if (strcmp(command,"c") == 0) {
       printf("[+] to which id?\n[>]: ");
       vallen=getline(&target, &target_len, stdin)-1;target[vallen]='\0';
       printf("[+] Say something\n[>]: ");
@@ -387,7 +391,6 @@ int main(int argc, char const *argv[])
       } else {
         fprintf(stderr, "[+] Target not found!\n");
       }
-
     } else if (strcmp(command,"r") == 0) {
       printf("\n========Refresh========\n\n");
       printf("[+] to which id?\n[>]: ");
@@ -400,9 +403,8 @@ int main(int argc, char const *argv[])
       } else {
         fprintf(stderr, "[+] Target not found!\n");
       }
-      
     } else if (strcmp(command, "q") == 0) {
-      state_machine('q')
+      state_machine('q');
     } else if (strcmp(command, "e") == 0) {
       close(sockfd);
       printf("[+] ByeBye~~\n");
