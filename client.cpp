@@ -29,6 +29,7 @@
 #define MAX_DATALEN 8192 
 #define USERNAME_LEN 100
 #define PASSWORD_LEN 100
+#define FILE_LEN 100
 #define MSG_LEN 1024
 #define CMD_LEN 10
 #define ID_LEN 9
@@ -110,33 +111,6 @@ void print_command_message()
   }
   
 }
-
-// void state_machine(char input) {
-//   printf("\n=before status=%d\n", STATUS);
-//   switch(STATUS) {
-//     case IDLE://0
-//       if (input=='l') STATUS = MAIN;
-//       if (input=='s') STATUS = IDLE;
-//       break;
-//     case MAIN://1
-//       if (input=='m') STATUS = CHOOSE;
-//       if (input=='e') STATUS = IDLE;
-//       if (input=='t') STATUS = LIST;
-//       break;
-//     case LIST:
-//       break;
-//     case CHOOSE://3
-//       if (input=='c') STATUS = ROOM;
-//       if (input=='q') STATUS = MAIN;
-//       break;
-//     case ROOM://3
-//       if (input=='q') STATUS = MAIN;
-//       break;
-//     default:
-//       printf("System Error [+]: state%d\n", STATUS);
-//       break;
-//   }
-// }
 
 void htoip(char *hostname) 
 {   
@@ -255,11 +229,21 @@ void get_list(int fd, char target) {
 
 }
 
-void messaging(int fd, int target, const char* message)
+std::string endecrypt(std::string msg)
 {
-  // char json_content_req[MAX_DATALEN];
+  for(char& c : msg) {
+    c = (c+64)%128;
+  }
+  return msg;
+}
+
+void messaging(int fd, int target, char* message)
+{
   std::string message_str(message);
-  // std::cout << message_str << std::endl;
+  //encryption
+  message_str = endecrypt(message_str);
+  
+  //base64 encode
   std::string encoded_message_str = base64_encode(reinterpret_cast<const unsigned char*>(message_str.c_str()), message_str.length());
   // std::cout << encoded_message_str << std::endl;
   json j_req;
@@ -322,10 +306,20 @@ void refresh(int fd, int target, int start, int end)
     // std::cout << x << std::endl;
     line_num = x[0].get<int>();
     std::string message = x[1]["message"].get<std::string>();
+
+    //base64 decode
     std::string decoded_message = base64_decode(message);
+    //decrypt
+    decoded_message = endecrypt(decoded_message);
+
     int who = x[1]["who"].get<int>();
     std::cout << "[" << line_num << "]user" << who << ": " << decoded_message << std::endl;
   }
+}
+
+int upload(int fd,  const char* filename)
+{
+  return 0;
 }
 
 void input(char *buf, size_t len) {
@@ -371,6 +365,7 @@ int main(int argc, char const *argv[])
   char* command = (char*)malloc(sizeof(char) * CMD_LEN);
   char* username = (char*)malloc(sizeof(char) * USERNAME_LEN);
   char* password = (char*)malloc(sizeof(char) * PASSWORD_LEN);
+  char* filename = (char*)malloc(sizeof(char) * FILE_LEN);
   char* target = (char*)malloc(sizeof(char) * ID_LEN);
   char* msg = (char*)malloc(sizeof(char) * MSG_LEN);
   int target_num;
@@ -472,20 +467,27 @@ int main(int argc, char const *argv[])
       }
       break;
     case ROOM:
-      input(command, MSG_LEN);
-      if (strcmp(command,"r") == 0) {
-        printf("\n========Refresh========\n\n");
+      input(msg, MSG_LEN);
+      if (strcmp(msg,"r") == 0) {
+        printf("\n=========Sign Up==========\n\n");
+        printf("\n=========Refresh==========\n\n");
         refresh(sockfd, CHATTING_TO, 0, 0);
-      } else if (strcmp(command,"u") == 0) {
+      } else if (strcmp(msg,"u") == 0) {
         //upload file
-      } else if (strcmp(command,"f") == 0) {
+        printf("\n=========Upload============\n\n");
+        printf("[+] filename?\n[>]: ");
+        input(filename, FILE_LEN);
+
+        printf(" filename: %s\n", filename);
+        int status_code = upload(sockfd, filename);
+      } else if (strcmp(msg,"f") == 0) {
         //fetch file
-      } else if (strcmp(command,"q") == 0) {
+      } else if (strcmp(msg,"q") == 0) {
         CHATTING_TO = 0;
         STATUS = MAIN;
       } else {
-        printf("[+] id:%d msg: %s\n", target_num, command);
-        messaging(sockfd, CHATTING_TO, command);
+        printf("[+] id:%d msg: %s\n", target_num, msg);
+        messaging(sockfd, CHATTING_TO, msg);
         refresh(sockfd, CHATTING_TO, 0, 0);
       }
       break;
