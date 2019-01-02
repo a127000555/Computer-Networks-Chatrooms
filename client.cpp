@@ -61,6 +61,7 @@ int CHATTING_TO; //chat to who
 
 void print_command_message()
 {
+  printf("\n====after status====%d\n", STATUS);
   printf("\n\n========PiePieChat========\n\n");
   switch(STATUS) {
     case IDLE:
@@ -99,7 +100,7 @@ void print_command_message()
 }
 
 void state_machine(char input) {
-  printf("\n====status====%d\n", STATUS);
+  printf("\n====before status====%d\n", STATUS);
   switch(STATUS) {
     case IDLE://0
       if (input=='l') STATUS = MAIN;
@@ -107,6 +108,7 @@ void state_machine(char input) {
       break;
     case MAIN://1
       if (input=='m') STATUS = LIST;
+      if (input=='e') STATUS = IDLE;
       break;
     case LIST://2
       if (input=='q') STATUS = MAIN;
@@ -403,9 +405,11 @@ int main(int argc, char const *argv[])
       } else {
         fprintf(stderr, "[+] Target not found!\n");
       }
-    } else if (strcmp(command, "q") == 0) {
+    }else if (strcmp(command, "e") == 0) { 
+      state_machine('e');
+    }else if (strcmp(command, "q") == 0) {
       state_machine('q');
-    } else if (strcmp(command, "e") == 0) {
+    } else if (strcmp(command, "g") == 0) {
       close(sockfd);
       printf("[+] ByeBye~~\n");
       break;
