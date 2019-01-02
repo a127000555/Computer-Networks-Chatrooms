@@ -8,7 +8,7 @@ CFLAGS= -O3 -ldl -lpthread -pthread -std=c++14
 
 piepie-server: server.cpp 
 	$(CC) -o piepie-server server.cpp $(CFLAGS)
-	$(CC) -o piepie-client client.cpp $(CFLAGS)
+	$(CC) -o piepie-client client.cpp base64.cpp $(CFLAGS)
 
 clean:
 	rm -f piepie-server
