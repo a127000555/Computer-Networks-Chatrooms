@@ -105,7 +105,7 @@ void edit_list(int fd,int len){
 			std::string target_list = j["target_list"].get<std::string>();
 			std::string op = j["op"].get<std::string>();
 			int target_id = j["target_id"].get<int>();
-			if(all_users[target_id]){
+			if(all_users.find(target_id) != all_users.end()){
 				if(op == "add" && target_list == "friend")
 					u->friend_list.insert(target_id);
 				else if(op == "add" && target_list == "black")
@@ -176,7 +176,7 @@ void id_to_username(int fd,int len){
 json j = recv_client_data(fd,len);
 	if(client_status[fd] == 'U') return;
 	int target = j["target"].get<int>();	
-	if(all_users[target])
+	if(all_users.find(target) != all_users.end() )
 		response_client(fd,200,"OK: Record successfully.",all_users[target]->user_name);
 	else
 		response_client(fd,404,"User not found.",{});
