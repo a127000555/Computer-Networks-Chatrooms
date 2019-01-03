@@ -1,7 +1,8 @@
 #include <dirent.h>
 #include <unistd.h> 
-#include <arpa/inet.h>
 
+#include <sys/stat.h>
+#include <arpa/inet.h>
 #include <bits/stdc++.h>
 
 #include "json.hpp"
@@ -12,13 +13,24 @@
 
 
 void initiailization(){
-	DIR *dir = opendir("./usr");
-	struct dirent *entry;
-	while( (entry = readdir(dir)) != NULL ){
-		if(strcmp(entry->d_name,".") != 0 && strcmp(entry->d_name,"..") != 0 ){
-			int id = atoi(entry->d_name);
-			all_users[id] = user_refresh(id);
-			username_to_id[all_users[id]->user_name] = id;
+	DIR *dir = opendir("./history");
+	if(!dir)
+		mkdir("./history",0755);
+	dir = opendir("./file_save");
+	if(!dir)
+		mkdir("./file_save",0755);
+	dir = opendir("./usr");
+	if(!dir){
+		mkdir("./usr",0755);
+		initiailization();
+	}else{
+		struct dirent *entry;
+		while( (entry = readdir(dir)) != NULL ){
+			if(strcmp(entry->d_name,".") != 0 && strcmp(entry->d_name,"..") != 0 ){
+				int id = atoi(entry->d_name);
+				all_users[id] = user_refresh(id);
+				username_to_id[all_users[id]->user_name] = id;
+			}
 		}
 	}
 }
@@ -52,19 +64,62 @@ void sign_up(int fd,int len){
 void send_talking_list(int fd,int len){
 	json j = recv_client_data(fd,len);
 	if(client_status[fd] == 'U') return;
-	struct user_info *u = all_users.find(client_fd_to_id[fd])->second;
-	std::string target = j["target"].get<std::string>();
-	std::vector<json> out;
-	for (const auto& kv : all_users) {
-		json this_data = json::array({kv.second->user_id,kv.second->user_name});
-		if(target == "a")
-			out.push_back(this_data);
-		if(target == "f" && u->friend_list.find(kv.second->user_name) != u->friend_list.end())
-			out.push_back(this_data);
-		if(target == "b"  && u->black_list.find(kv.second->user_name) != u->black_list.end())
-			out.push_back(this_data);
+	if(client_status[fd] != 'L'){
+		response_client(fd,403,"Forbidden: Not loggined.",{});	
+	}else{
+		struct user_info *u = all_users.find(client_fd_to_id[fd])->second;
+		std::string target = j["target"].get<std::string>();
+		std::vector<json> out;
+		puts("heere");
+		for(int i:u->black_list){
+			printf("black : %d\n",i);
+		}
+		for (const auto& kv : all_users) {
+			json this_data = json::array({kv.second->user_id,kv.second->user_name});
+			if(target == "a")
+				out.push_back(this_data);
+			if(target == "f" && u->friend_list.find(kv.second->user_id) != u->friend_list.end())
+				out.push_back(this_data);
+			if(target == "b"  && u->black_list.find(kv.second->user_id) != u->black_list.end())
+				out.push_back(this_data);
+		}
+		response_client(fd,200,"fetch list successfully.",out);
 	}
-	response_client(fd,200,"fetch list successfully.",out);
+}
+void edit_list(int fd,int len){
+	json j = recv_client_data(fd,len);
+	if(client_status[fd] == 'U') return;
+	if(client_status[fd] == 'I'){
+		response_client(fd,403,"Forbidden: Not loggined.",{});		
+	}else{
+		int id = client_fd_to_id[fd];
+		struct user_info* u = all_users[id];
+		if(u){
+			std::string target_list = j["target_list"].get<std::string>();
+			std::string op = j["op"].get<std::string>();
+			int target_id = j["target_id"].get<int>();
+			if(all_users[target_id]){
+				if(op == "add" && target_list == "friend")
+					u->friend_list.insert(target_id);
+				else if(op == "add" && target_list == "black")
+					u->black_list.insert(target_id);
+				else if(op == "delete" && target_list == "friend")
+					u->friend_list.erase(target_id);
+				else if(op == "delete" && target_list == "black")
+					u->black_list.erase(target_id);
+				else{
+					response_client(fd,406,"Not Acceptable: What are you type? bitch.",{});
+					return ;
+				}
+				user_save(u);
+				response_client(fd,200,"Wow, I complete the mission:).",{});
+			}else{
+				response_client(fd,406,"Not Acceptable: Target id not exists.",{});
+			}
+		}else{
+			response_client(fd,406,"Not Acceptable: User not exist or not login.",{});
+		}
+	}
 }
 void login(int fd,int len){
 	json j = recv_client_data(fd,len);
@@ -101,11 +156,56 @@ void messaging(int fd,int len){
 		std::string filename = record_init_and_return_filename(client_fd_to_id[fd],target);
 		FILE *fout = fopen(filename.c_str(),"a");
 		fprintf(fout,"%d %d %s\n",client_fd_to_id[fd],strcmp(type.c_str(),"message")!=0,message.c_str());
-		fflush(fout);
 		fclose(fout);
 		response_client(fd,200,"OK: Record successfully.",{});	
 	}
 }
+void upload_file(int fd,int len){
+	json j = recv_client_data(fd,len);
+	if(client_status[fd] == 'U') return;
+	
+	int target = j["target"].get<int>();
+	std::string filename = j["filename"].get<std::string>();
+	std::string data = j["data"].get<std::string>();
+	if(client_status[fd] != 'L'){
+		response_client(fd,403,"Forbidden: Not loggined.",{});	
+	}else{
+		int file_id = rand()*rand();
+		filename = "./file_save/" + filename + "_" + std::to_string(file_id);
+		FILE *fout = fopen(filename.c_str(),"w");
+		fprintf(fout,"%s\n",filename.c_str());
+		fclose(fout);
+		
+		filename = record_init_and_return_filename(client_fd_to_id[fd],target);
+		fout = fopen(filename.c_str(),"a");
+		fprintf(fout,"%d %d %s\n",client_fd_to_id[fd],1,filename.c_str());
+		fclose(fout);
+		response_client(fd,200,"OK: Upload successfully.",{});	
+	}
+}
+void download_file(int fd,int len){
+	json j = recv_client_data(fd,len);
+	if(client_status[fd] == 'U') return;
+	
+	int target = j["target"].get<int>();
+	std::string filename = j["filename"].get<std::string>();
+	if(client_status[fd] != 'L'){
+		response_client(fd,403,"Forbidden: Not loggined.",{});	
+	}else{
+		FILE *fin = fopen(filename.c_str(),"r");
+		if(fin){
+			char *large_buffer = (char*) malloc(1<<20);
+			retval = fscanf(fin,"%s",large_buffer);
+			fclose(fin);
+			response_client(fd,200,"OK: Download successfully.",std::string(large_buffer));	
+			free(large_buffer);	
+		}else{
+			response_client(fd,404,"File Not Found.",{});	
+
+		}
+	}
+}
+
 void refresh(int fd,int len){
 	json j = recv_client_data(fd,len);
 	if(client_status[fd] == 'U') return;
@@ -121,14 +221,24 @@ void refresh(int fd,int len){
 		retval = fscanf(fin,"%d %d %d %d\n",&id1,&id2,&id1_read,&id2_read);
 		int counter = 0, who, type;
 		char msg_buf[MAX_DATALEN+1];
-		std::map<int,json> history;
+		std::vector<json> raw_history;
 		while(fscanf(fin,"%d %d %s\n",&who,&type,msg_buf)!=EOF){
 			json j;
 			j["message"] = msg_buf;
 			j["type"] = type == 0 ? "message" : "data";
 			j["who"] = who;
-			history[counter] = j;
+			raw_history.push_back(j);
 			counter += 1;
+		}
+		std::map<int,json> history;
+		if(start_from < 0)
+			start_from = counter + start_from;
+		if(end_to < 0)
+			end_to = counter + end_to;
+		if(end_to >= counter)
+			end_to = counter-1;
+		for(;start_from<=end_to && start_from>=0 ;start_from++){
+			history[start_from] = raw_history[start_from];
 		}
 		response_client(fd,200,"fetch history successfully.",history);
 		fclose(fin);
@@ -173,6 +283,8 @@ int main(int argc, char **argv){
 						case 'a':	send_talking_list(fd,len);	break;
 						case 'm':	messaging(fd,len);			break;
 						case 'r':	refresh(fd,len);			break;
+						case 'x':	edit_list(fd,len);			break;
+						case 'u':	upload_file(fd,len);		break;
 					}
 					printf("\t\t\t[system] fd(%d) send strange packet\n",fd);
 					printf("len = %llu\n",len);

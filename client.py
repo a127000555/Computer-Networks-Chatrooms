@@ -1,5 +1,6 @@
 import json
 import sys
+import time
 from pwn import p64,u64
 from termcolor import *
 from socket import *
@@ -65,10 +66,21 @@ def refresh(clientSocket, i, start,end):
 	j = wait_response(clientSocket)
 	print(colored(j['state'],'cyan'))
 	for k,d in sorted(j["data"]):
-		print("[{: <40s}] (talk:{}, type:{})".format(b64decode(d["message"]).decode(),d["who"],d["type"]))
+		print("line {:0>4d} :[{: <40s}] (talk:{}, type:{})".format(k,b64decode(d["message"]).decode(),d["who"],d["type"]))
+
+def edit_list(clientSocket, op,target_list, target_id):
+	if op not in ["add",'delete'] or target_list not in ['black','friend']:
+		print('what?')
+		return
+	uni_pkt, content = protocol_pkt('x', {'op':op ,'target_id':target_id,'target_list':target_list})
+	clientSocket.sendall(uni_pkt)
+	clientSocket.sendall(content)
+	j = wait_response(clientSocket)
+	print(colored(j['state'],'cyan'))
+
 clientSocket = new_connection()
 while True:
-	command = input('command? (sign up / login / show user / messaging / refresh)\n[>]: ').strip().lower()
+	command = input('command? (sign up / login / show user / messaging / refresh/ edit list)\n[>]: ').strip().lower()
 	if command == 'sign up':
 		username = input('username?\n[>]: ').strip()
 		password = input('password?\n[>]: ').strip()
@@ -80,17 +92,31 @@ while True:
 	elif command == 'show user':
 		target = input('target? (b/f/a)\n[>]: ').strip()
 		get_user_list(clientSocket,target)
-
 	elif command == 'messaging':
 		target = int(input('to which id?\n[>]: ').strip())
 		msg = input('Say something\n[>]: '.strip())
 		messaging(clientSocket,target,msg)
+	elif command == 'refresh all':
+		target = int(input('to which id?\n[>]: ').strip())
+		refresh(clientSocket,target,0,-1)
 	elif command == 'refresh':
 		target = int(input('to which id?\n[>]: ').strip())
-		refresh(clientSocket,target,0,0)
+		start_from = int(input('start from? \n[>]: ').strip())
+		end_to = int(input('end to? \n[>]: ').strip())
+		refresh(clientSocket,target,start_from,end_to)
+	elif command == 'edit list':
+		target_list = input('to what list? (black/friend) \n[>]: ').strip()
+		op = input('add or delete\n[>]: ').strip()
+		target_id = int(input('to which id?\n[>]: ').strip())
+		edit_list(clientSocket,op,target_list,target_id)
 	elif command == 'auto login':
 		login(clientSocket,'mama','mama')
-
+	elif command == 'auto edit list':
+		edit_list(clientSocket,'add','black',15)
+	elif command == 'auto send trash':
+		target = int(input('to which id?\n[>]: ').strip())
+		for i in range(100):
+			messaging(clientSocket,target,str(time.localtime())+str(i))
 clientSocket.close()
 
 '''

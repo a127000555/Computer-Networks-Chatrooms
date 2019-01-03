@@ -150,8 +150,7 @@ Computer Networks pRj2
 ```json
 {
     "target" : "int",
-    "filename" : "string",
-    "FILEID" : "string",
+    "filename" : "string"
 }
 ```
 ##### Response
@@ -160,7 +159,7 @@ Computer Networks pRj2
 {
     "status_code" : int,
     "state" : "string",
-    "data" : [base64(file)]
+    "data" : base64(file) (its string.)
 }
 ```
 
@@ -197,7 +196,9 @@ Computer Networks pRj2
 {
     "op" : "string",
     // add / delete
-    "target" : "int"
+    "target_list" : "string",
+    // black / friend
+    "target_id" : "int"
 }
 ```
 
