@@ -5,6 +5,7 @@ from pwn import p64,u64
 from termcolor import *
 from socket import *
 from base64 import *
+from pathlib import Path
 user_list = []
 def new_connection(serverName='localhost',serverPort=int(sys.argv[1])):
 	clientSocket = socket(AF_INET, SOCK_STREAM)
@@ -49,6 +50,31 @@ def messaging(clientSocket, i, msg):
 	j = wait_response(clientSocket)
 	print(colored(j['state'],'cyan'))
 
+def upload_file(clientSocket, target, file_path):
+	mf = Path(file_path)
+	if not mf.exists():
+		print('file not exists.')
+	else:
+		fin = open(file_path,'rb')
+		msg = b64encode(fin.read()).decode()
+		filename = file_path.split('/')[-1]
+		uni_pkt, content = protocol_pkt('u', {'target':target,"filename":filename,"data":msg})
+		clientSocket.sendall(uni_pkt)
+		clientSocket.sendall(content)
+		j = wait_response(clientSocket)
+		print(colored(j['state'],'cyan'))
+
+def download(clientSocket, target, filename, file_path):
+	uni_pkt, content = protocol_pkt('d', {'target':target,"filename":filename})
+	clientSocket.sendall(uni_pkt)
+	clientSocket.sendall(content)
+	j = wait_response(clientSocket)
+	print(j['data'])
+	data_bytes = b64decode(j['data'].encode())
+	with open(file_path,'wb') as fout:
+		fout.write(data_bytes)
+	print(colored(j['state'],'cyan'))
+
 def get_user_list(clientSocket, target):
 	if target not in ['b','f','a']:
 		print('The target is not recogniazable.')
@@ -57,7 +83,8 @@ def get_user_list(clientSocket, target):
 	clientSocket.sendall(uni_pkt)
 	clientSocket.sendall(content)
 	j = wait_response(clientSocket)
-	show_user_list(j['data'])
+	if j['status_code'] == 200:
+		show_user_list(j['data'])
 
 def refresh(clientSocket, i, start,end):
 	uni_pkt, content = protocol_pkt('r', {'target':i,"start_from":start,"end_to":end})
@@ -65,9 +92,12 @@ def refresh(clientSocket, i, start,end):
 	clientSocket.sendall(content)
 	j = wait_response(clientSocket)
 	print(colored(j['state'],'cyan'))
-	for k,d in sorted(j["data"]):
-		print("line {:0>4d} :[{: <40s}] (talk:{}, type:{})".format(k,b64decode(d["message"]).decode(),d["who"],d["type"]))
-
+	if j['status_code'] == 200:
+		for k,d in sorted(j["data"]):
+			if d["type"] == "message":
+				print("line {:0>4d} :[{: <40s}] (talk:{})".format(k,b64decode(d["message"]).decode(),d["who"]))
+			else:
+				print(colored('line %04d :a file uploaded by %d ! (%s)' % (k,d['who'],d['message']),'red'))
 def edit_list(clientSocket, op,target_list, target_id):
 	if op not in ["add",'delete'] or target_list not in ['black','friend']:
 		print('what?')
@@ -80,7 +110,7 @@ def edit_list(clientSocket, op,target_list, target_id):
 
 clientSocket = new_connection()
 while True:
-	command = input('command? (sign up / login / show user / messaging / refresh/ edit list)\n[>]: ').strip().lower()
+	command = input('command? (sign up / login / show user / messaging / refresh / edit list / upload file)\n[>]: ').strip().lower()
 	if command == 'sign up':
 		username = input('username?\n[>]: ').strip()
 		password = input('password?\n[>]: ').strip()
@@ -92,6 +122,15 @@ while True:
 	elif command == 'show user':
 		target = input('target? (b/f/a)\n[>]: ').strip()
 		get_user_list(clientSocket,target)
+	elif command == 'upload file':
+		target = int(input('target_id?\n[>]: ').strip())
+		file_path = input('file path? \n[>]: ').strip()
+		upload_file(clientSocket,target,file_path)
+	elif command == 'download file':
+		target = int(input('target_id?\n[>]: ').strip())
+		filename = input('filename? \n[>]: ').strip()
+		file_path = input('save where? \n[>]: ').strip()
+		download(clientSocket,target,filename,file_path)
 	elif command == 'messaging':
 		target = int(input('to which id?\n[>]: ').strip())
 		msg = input('Say something\n[>]: '.strip())
@@ -117,6 +156,9 @@ while True:
 		target = int(input('to which id?\n[>]: ').strip())
 		for i in range(100):
 			messaging(clientSocket,target,str(time.localtime())+str(i))
+	elif command == 'auto send file':
+		upload_file(clientSocket,2,'./sample_file')
+	
 clientSocket.close()
 
 '''

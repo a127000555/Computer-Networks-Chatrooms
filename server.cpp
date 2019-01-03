@@ -170,15 +170,17 @@ void upload_file(int fd,int len){
 	if(client_status[fd] != 'L'){
 		response_client(fd,403,"Forbidden: Not loggined.",{});	
 	}else{
-		int file_id = rand()*rand();
-		filename = "./file_save/" + filename + "_" + std::to_string(file_id);
-		FILE *fout = fopen(filename.c_str(),"w");
-		fprintf(fout,"%s\n",filename.c_str());
+		int file_id = abs(rand()*rand());
+		std::string filepath = "./file_save/" + filename + "_" + std::to_string(file_id);
+		FILE *fout = fopen(filepath.c_str(),"w");
+		printf("write to %s",filepath.c_str());
+		fprintf(fout,"%s",data.c_str());
 		fclose(fout);
+		printf("write end ");
 		
-		filename = record_init_and_return_filename(client_fd_to_id[fd],target);
-		fout = fopen(filename.c_str(),"a");
-		fprintf(fout,"%d %d %s\n",client_fd_to_id[fd],1,filename.c_str());
+		std::string filename2 = record_init_and_return_filename(client_fd_to_id[fd],target);
+		fout = fopen(filename2.c_str(),"a");
+		fprintf(fout,"%d %d %s\n",client_fd_to_id[fd],1,(filename + "_" + std::to_string(file_id)).c_str());
 		fclose(fout);
 		response_client(fd,200,"OK: Upload successfully.",{});	
 	}
@@ -188,14 +190,17 @@ void download_file(int fd,int len){
 	if(client_status[fd] == 'U') return;
 	
 	int target = j["target"].get<int>();
+	
 	std::string filename = j["filename"].get<std::string>();
+	std::string filepath = "./file_save/" + filename;
 	if(client_status[fd] != 'L'){
 		response_client(fd,403,"Forbidden: Not loggined.",{});	
 	}else{
-		FILE *fin = fopen(filename.c_str(),"r");
+		FILE *fin = fopen(filepath.c_str(),"r");
 		if(fin){
 			char *large_buffer = (char*) malloc(1<<20);
 			retval = fscanf(fin,"%s",large_buffer);
+			puts(large_buffer);
 			fclose(fin);
 			response_client(fd,200,"OK: Download successfully.",std::string(large_buffer));	
 			free(large_buffer);	
@@ -237,6 +242,8 @@ void refresh(int fd,int len){
 			end_to = counter + end_to;
 		if(end_to >= counter)
 			end_to = counter-1;
+		if(start_from < 0)
+			start_from = 0;
 		for(;start_from<=end_to && start_from>=0 ;start_from++){
 			history[start_from] = raw_history[start_from];
 		}
@@ -278,13 +285,14 @@ int main(int argc, char **argv){
 				if (sz != 0){
 					unsigned long long len = *((unsigned long long *)(uni_pkt+1));
 					switch(uni_pkt[0]){
-						case 's':	sign_up(fd,len);			break;
 						case 'l':	login(fd,len);				break;
-						case 'a':	send_talking_list(fd,len);	break;
-						case 'm':	messaging(fd,len);			break;
+						case 's':	sign_up(fd,len);			break;
 						case 'r':	refresh(fd,len);			break;
+						case 'm':	messaging(fd,len);			break;
 						case 'x':	edit_list(fd,len);			break;
 						case 'u':	upload_file(fd,len);		break;
+						case 'd':	download_file(fd,len);		break;
+						case 'a':	send_talking_list(fd,len);	break;
 					}
 					printf("\t\t\t[system] fd(%d) send strange packet\n",fd);
 					printf("len = %llu\n",len);
