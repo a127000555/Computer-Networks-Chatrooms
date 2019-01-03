@@ -107,6 +107,19 @@ def edit_list(clientSocket, op,target_list, target_id):
 	clientSocket.sendall(content)
 	j = wait_response(clientSocket)
 	print(colored(j['state'],'cyan'))
+def crash_packet(clientSocket):
+	uni_pkt, content = protocol_pkt('x', {'opzzz':1 ,'targzet_id':'z','tazzzzrget_list':{}})
+	clientSocket.sendall(uni_pkt)
+	clientSocket.sendall(content)
+	j = wait_response(clientSocket)
+	print(colored(j['state'],'cyan'))
+
+def id_2_name(clientSocket,target):
+	uni_pkt, content = protocol_pkt('t', {'target':target})
+	clientSocket.sendall(uni_pkt)
+	clientSocket.sendall(content)
+	j = wait_response(clientSocket)
+	print(colored(j['state'],'cyan'))
 
 clientSocket = new_connection()
 while True:
@@ -158,7 +171,11 @@ while True:
 			messaging(clientSocket,target,str(time.localtime())+str(i))
 	elif command == 'auto send file':
 		upload_file(clientSocket,2,'./sample_file')
-	
+	elif command == 'go crash':
+		crash_packet(clientSocket)
+	elif command == 'id 2 name':
+		target = int(input('to which id?\n[>]: ').strip())
+		id_2_name(clientSocket,target)
 clientSocket.close()
 
 '''

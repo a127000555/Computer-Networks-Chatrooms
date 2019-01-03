@@ -25,8 +25,9 @@ Computer Networks pRj2
 | u      | **Upload File** : Upload a file.                             |
 | d      | **Download file** : Download a file                          |
 | a      | **All user**: Show all user/ friend list/ black list of login account. |
-| x      | **Edit Friend / Black List** |
+| x      | **Edit Friend / Black List**                                 |
 | !      | **Server message**                                           |
+| t      | **Tell the username if id is given.**                        |
 
 #### Sign up
 
@@ -212,6 +213,26 @@ Computer Networks pRj2
     "data" : []
 }
 ```
+#### Id -> username
+
+#####  Request
+
+```json
+{
+    "target" : "int"
+}
+```
+
+##### Response
+
+
+```json
+{
+    "status_code" : int,
+    "state" : "string",
+    "data" : "string"
+}
+```
 
 ## System & Program Design
 
@@ -252,21 +273,43 @@ make
 ### Extra Operation 
 ##### Friend List
 
+假設現在有很多人，那麼我們可以用friend list來快速查找你熟悉的人。
+
+此外，我們的friend list是可刪除的。
+
 ##### Black List
+
+假設你討厭某個人，你可以把它加入黑名單。
+此後如果你要拿到你們的聊天紀錄或傳訊息，server都會請你原諒它。
+
+此外，我們的black list是可刪除的。
 
 ### Client Protection & Usability
 
 ##### Client Auto Reconnect
 
-##### Encryption
+##### Message Encryption
 
 ### Server Protection & Security
 
 ##### Server Failover
 
+為了避免一些神奇的外力因素，或者client搞鬼，所以server除了SIGINT或一些uncatchable signal以外，一切忽略。
+
+或是當client傳了一些server無法處理而crash的時候，server也會自動回復。
+
 ##### No Plaintext Password
+
+由於Server存明文password會有很大的資安漏洞(只要server被pwn那麼所有人密碼都會外流)，因此我們的password是有SHA256過得。
 
 ##### File Hashing
 
+為了避免file有問題，server也提供一個很貼心的服務。
+在upload file的時候，除了後面會有magic number以外，也會附上sha256sum。
 
+而這個sha256sum是base64過後的，所以user要確認是否檔案下載無誤，可以使用以下這個指令。
+
+```bash
+base64 -w 0 XD.pdf | sha256sum
+```
 

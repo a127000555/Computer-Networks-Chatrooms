@@ -6,12 +6,19 @@
 #include <bits/stdc++.h>
 
 #include "json.hpp"
+#include "picosha2.h"
 #include "const.hpp"
 #include "global_variables.hpp"
 #include "file_interface.hpp"
 #include "respond.hpp"
-
-
+std::string string_to_sha256(std::string src_str){
+	std::vector<unsigned char> hash(picosha2::k_digest_size);
+	picosha2::hash256(src_str.begin(), src_str.end(), hash.begin(), hash.end());
+	return picosha2::bytes_to_hex_string(hash.begin(), hash.end());
+}
+void signalHandler( int signum ) {
+	longjmp(jmpbuffer, 0);
+}
 void initiailization(){
 	DIR *dir = opendir("./history");
 	if(!dir)
@@ -48,6 +55,7 @@ void sign_up(int fd,int len){
 		std::cout << "username: "<< username << std::endl;
 		std::cout << "password: "<< password << std::endl;
 		std::cout << "id: "<< id << std::endl;
+		password = string_to_sha256(password);
 		struct user_info *u = new struct user_info(id,username,password);
 		user_save(u);
 		all_users[id] = u;
@@ -70,7 +78,6 @@ void send_talking_list(int fd,int len){
 		struct user_info *u = all_users.find(client_fd_to_id[fd])->second;
 		std::string target = j["target"].get<std::string>();
 		std::vector<json> out;
-		puts("heere");
 		for(int i:u->black_list){
 			printf("black : %d\n",i);
 		}
@@ -125,7 +132,8 @@ void login(int fd,int len){
 	json j = recv_client_data(fd,len);
 	if(client_status[fd] == 'U') return;
 	std::string username = j["username"].get<std::string>();
-	std::string password = j["password"].get<std::string>();
+	std::string password = j["password"].get<std::string>();	
+	password = string_to_sha256(password);
 	if(client_status[fd] == 'L'){
 		response_client(fd,403,"Forbidden: You've logined.",{});
 	}else if(username_to_id.find(username) == username_to_id.end()){
@@ -153,6 +161,10 @@ void messaging(int fd,int len){
 	if(client_status[fd] != 'L'){
 		response_client(fd,403,"Forbidden: Not loggined.",{});	
 	}else{
+		if(all_users[client_fd_to_id[fd]]->black_list.find(target) != all_users[client_fd_to_id[fd]]->black_list.end()){
+			response_client(fd,403,"Forbidden: This man is in black list, please forgive him/her :).",{});
+			return;
+		}
 		std::string filename = record_init_and_return_filename(client_fd_to_id[fd],target);
 		FILE *fout = fopen(filename.c_str(),"a");
 		fprintf(fout,"%d %d %s\n",client_fd_to_id[fd],strcmp(type.c_str(),"message")!=0,message.c_str());
@@ -160,18 +172,27 @@ void messaging(int fd,int len){
 		response_client(fd,200,"OK: Record successfully.",{});	
 	}
 }
+void id_to_username(int fd,int len){
+json j = recv_client_data(fd,len);
+	if(client_status[fd] == 'U') return;
+	int target = j["target"].get<int>();	
+	if(all_users[target])
+		response_client(fd,200,"OK: Record successfully.",all_users[target]->user_name);
+	else
+		response_client(fd,404,"User not found.",{});
+}
 void upload_file(int fd,int len){
 	json j = recv_client_data(fd,len);
 	if(client_status[fd] == 'U') return;
-	
 	int target = j["target"].get<int>();
 	std::string filename = j["filename"].get<std::string>();
 	std::string data = j["data"].get<std::string>();
+	std::string hash = string_to_sha256(data);
 	if(client_status[fd] != 'L'){
 		response_client(fd,403,"Forbidden: Not loggined.",{});	
 	}else{
 		int file_id = abs(rand()*rand());
-		std::string filepath = "./file_save/" + filename + "_" + std::to_string(file_id);
+		std::string filepath = "./file_save/" + filename + "_" + std::to_string(file_id) + "_" + hash;
 		FILE *fout = fopen(filepath.c_str(),"w");
 		printf("write to %s",filepath.c_str());
 		fprintf(fout,"%s",data.c_str());
@@ -180,7 +201,7 @@ void upload_file(int fd,int len){
 		
 		std::string filename2 = record_init_and_return_filename(client_fd_to_id[fd],target);
 		fout = fopen(filename2.c_str(),"a");
-		fprintf(fout,"%d %d %s\n",client_fd_to_id[fd],1,(filename + "_" + std::to_string(file_id)).c_str());
+		fprintf(fout,"%d %d %s\n",client_fd_to_id[fd],1,(filename + "_" + std::to_string(file_id)+ "_" + hash).c_str());
 		fclose(fout);
 		response_client(fd,200,"OK: Upload successfully.",{});	
 	}
@@ -220,6 +241,10 @@ void refresh(int fd,int len){
 	if(client_status[fd] != 'L'){
 		response_client(fd,403,"Forbidden: Not loggined.",{});	
 	}else{
+		if(all_users[client_fd_to_id[fd]]->black_list.find(target) != all_users[client_fd_to_id[fd]]->black_list.end()){
+			response_client(fd,403,"Forbidden: This man is in black list, please forgive him/her :).",{});
+			return;
+		}
 		std::string filename = record_init_and_return_filename(client_fd_to_id[fd],target);
 		FILE *fin = fopen(filename.c_str(),"r");
 		int id1,id2,id1_read,id2_read;
@@ -271,6 +296,12 @@ int main(int argc, char **argv){
 		client_status[i]='U';
 	initiailization();
 	// start working
+	for(int i=1;i<=20;i++){
+		if(i != SIGINT){
+			signal(i, signalHandler); 
+		}
+	}
+	int jmpVal = setjmp(jmpbuffer);
 	while (1){
 		memcpy(&retset,&readset,sizeof(readset));
 		retval = select(MAX_FD, &retset, NULL, NULL, NULL);
@@ -283,19 +314,27 @@ int main(int argc, char **argv){
 				char uni_pkt[10];
 				ssize_t sz = recv(fd,uni_pkt,9,0);
 				if (sz != 0){
-					unsigned long long len = *((unsigned long long *)(uni_pkt+1));
-					switch(uni_pkt[0]){
-						case 'l':	login(fd,len);				break;
-						case 's':	sign_up(fd,len);			break;
-						case 'r':	refresh(fd,len);			break;
-						case 'm':	messaging(fd,len);			break;
-						case 'x':	edit_list(fd,len);			break;
-						case 'u':	upload_file(fd,len);		break;
-						case 'd':	download_file(fd,len);		break;
-						case 'a':	send_talking_list(fd,len);	break;
+					try{
+						unsigned long long len = *((unsigned long long *)(uni_pkt+1));
+						switch(uni_pkt[0]){
+							case 'l':	login(fd,len);				break;
+							case 's':	sign_up(fd,len);			break;
+							case 'r':	refresh(fd,len);			break;
+							case 'm':	messaging(fd,len);			break;
+							case 'x':	edit_list(fd,len);			break;
+							case 'u':	upload_file(fd,len);		break;
+							case 'd':	download_file(fd,len);		break;
+							case 'a':	send_talking_list(fd,len);	break;
+							case 't':	id_to_username(fd,len);		break;
+						}
+						printf("\t\t\t[system] fd(%d) send strange packet\n",fd);
+						printf("len = %llu\n",len);
+					} catch(json::parse_error){
+						response_client(fd,406,"Not Acceptable: Are you're string is json parsable?",{});
+						puts("wow parse error detected.");
+					}catch(json::type_error){
+						response_client(fd,406,"Not Acceptable: Are you're json file is meet our protocol?",{});
 					}
-					printf("\t\t\t[system] fd(%d) send strange packet\n",fd);
-					printf("len = %llu\n",len);
 				}else{ // sz = 0 : client closed.
 					finalize_client(fd);
 				}

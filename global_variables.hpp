@@ -5,3 +5,4 @@ char client_status[MAX_FD];
 int client_fd_to_id[MAX_FD]; 
 int sockfd,retval;
 fd_set readset , retset;
+jmp_buf jmpbuffer;
