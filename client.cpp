@@ -351,207 +351,225 @@ int main(int argc, char const *argv[])
   htoip(hostname);
   printf("Server is on %s:%s\n", hostname, port);
 
-
-  // fork for auto reconnect
-  pid_t pid = fork();
-  if (pid > 0) {
-    // parent process
-    fprintf(stderr, "parent\n");
-    // init socket
-    int monitor_sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    struct sockaddr_in serverInfo;
-    bzero(&serverInfo, sizeof(serverInfo));
-    serverInfo.sin_family = PF_INET;
-    serverInfo.sin_addr.s_addr = inet_addr(hostname);
-    serverInfo.sin_port = htons(atoi(port));
-    int retval = connect(monitor_sockfd, (struct sockaddr *)&serverInfo, sizeof(serverInfo));
-    assert(retval >= 0);
-    fprintf(stderr, "m sock=%d\n", monitor_sockfd);
-
-    // 宣告 select() 使用的資料結構
-    fd_set readset;
-    fd_set working_readset;
-    FD_ZERO(&readset);
-    FD_SET(monitor_sockfd, &readset);
-    struct timeval timeout;
-    timeout.tv_sec = 0;
-    timeout.tv_usec = 10;
-
-    while(1) {
-      // 宣告select要用的working_readset
-      FD_ZERO(&working_readset);
-      memcpy(&working_readset, &readset, sizeof(fd_set));
-
-      retval = select(MAX_FD, &working_readset, NULL, NULL, &timeout);
-      if (retval < 0) { // 發生錯誤
-        fprintf(stderr, "select() went wrong");
-        return 0;
-      } else if (!FD_ISSET(monitor_sockfd, &working_readset)){
-        continue;
-      } else {
-        fprintf(stderr, "\n[!] Server is down\n");
+  while(1){
+    sleep(2);
+    // fork for auto reconnect
+    pid_t pid = fork();
+    if (pid > 0) {
+      // parent process
+      fprintf(stderr, "parent\n");
+      // init socket
+      int monitor_sockfd = socket(AF_INET, SOCK_STREAM, 0);
+      struct sockaddr_in serverInfo;
+      bzero(&serverInfo, sizeof(serverInfo));
+      serverInfo.sin_family = PF_INET;
+      serverInfo.sin_addr.s_addr = inet_addr(hostname);
+      serverInfo.sin_port = htons(atoi(port));
+      int retval = connect(monitor_sockfd, (struct sockaddr *)&serverInfo, sizeof(serverInfo));
+      // assert(retval >= 0);
+      if(retval < 0) {
         kill(pid, SIGKILL);
-        break;
+        continue;
       }
-    } 
 
-  } else if (pid == 0) {
-    fprintf(stderr, "child\n");
-    // child process
-    // init socket
-    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    struct sockaddr_in serverInfo;
-    bzero(&serverInfo, sizeof(serverInfo));
-    serverInfo.sin_family = PF_INET;
-    serverInfo.sin_addr.s_addr = inet_addr(hostname);
-    serverInfo.sin_port = htons(atoi(port));
-    int retval = connect(sockfd, (struct sockaddr *)&serverInfo, sizeof(serverInfo));
-    assert(retval >= 0);
-    fprintf(stderr, "Connection Success!\n");
+      // 宣告 select() 使用的資料結構
+      fd_set readset;
+      fd_set working_readset;
+      FD_ZERO(&readset);
+      FD_SET(monitor_sockfd, &readset);
+      struct timeval timeout;
+      timeout.tv_sec = 0;
+      timeout.tv_usec = 10;
 
-    // Some variable for chat room command
-    char* command = (char*)malloc(sizeof(char) * CMD_LEN);
-    char* username = (char*)malloc(sizeof(char) * USERNAME_LEN);
-    char* password = (char*)malloc(sizeof(char) * PASSWORD_LEN);
-    char* filename = (char*)malloc(sizeof(char) * FILE_LEN);
-    char* target = (char*)malloc(sizeof(char) * ID_LEN);
-    char* msg = (char*)malloc(sizeof(char) * MSG_LEN);
-    int target_num;
+      while(1) {
+        // 宣告select要用的working_readset
+        FD_ZERO(&working_readset);
+        memcpy(&working_readset, &readset, sizeof(fd_set));
 
-    // Flag for ending while loop
-    int goodbye = 0;
-
-    // Chat room while
-    while (!goodbye) {
-      print_command_message();
-
-      switch(STATUS) {
-      case IDLE:
-        input(command, CMD_LEN);
-        if (strcmp (command, "s") == 0) {
-          printf("\n=========Sign Up==========\n\n");
-          printf("[+] username?\n[>]: ");
-          input(username, USERNAME_LEN);
-
-          printf("[+] password?\n[>]: ");
-          input(password, PASSWORD_LEN);
-
-          printf(" usr:%s pwd: %s\n", username, password);
-          sign_up(sockfd, username, password);
-        } else if (strcmp(command,"l") == 0) {
-          printf("\n==========Login===========\n\n");
-          printf("[+] username?\n[>]: ");
-          input(username, USERNAME_LEN);
-
-          printf("[+] password?\n[>]: ");
-          input(password, PASSWORD_LEN);
-
-          printf(" usr:%s pws: %s\n", username, password);
-          int status_code = login(sockfd, username, password);
-
-          if (status_code == 200) {
-            STATUS = MAIN;
-          }
-        } else if (strcmp(command,"g") == 0) {
-          printf("\n========PiePieChat========\n");
-          close(sockfd);
-          goodbye = 1;
-          printf("[+] ByeBye~~\n");
+        retval = select(MAX_FD, &working_readset, NULL, NULL, &timeout);
+        if (retval < 0) { // 發生錯誤
+          fprintf(stderr, "select() went wrong");
+          return 0;
+        } else if (!FD_ISSET(monitor_sockfd, &working_readset)){
+          continue;
         } else {
-          printf("[+] Command not found!\n");
+          fprintf(stderr, "\n[!] Server is down\n");
+          kill(pid, SIGKILL);
+          break;
         }
-        break;
-      case MAIN:
-        input(command, CMD_LEN);
-        if (strcmp(command,"m") == 0) {
-          STATUS = CHOOSE;
-        } else if (strcmp(command, "x") == 0) {
-          //edit list
-        } else if (strcmp(command,"t") == 0) {
-          STATUS = LIST;
-        } else if (strcmp(command,"e") == 0) { 
-          STATUS = IDLE;
-          close(sockfd);
-          goodbye = 1;
-          printf("[+] ByeBye~~\n");
-        } else {
-          printf("[+] Command not found!\n");
-        }
-        break;
-      case LIST:
-        input(command, CMD_LEN);
-        if (strcmp(command,"m") == 0) {
-          STATUS = CHOOSE;
-        } else if (strcmp(command,"a") == 0) {
-          //show friends
-          printf("[+] Show user\n");
-          get_list(sockfd, 'a');
-        } else if (strcmp(command,"d") == 0) {
-          //show friends
-          get_list(sockfd, 'f');
-        } else if (strcmp(command,"b") == 0) {
-          //show blacklist
-          get_list(sockfd, 'b');
-        } else if (strcmp(command, "q") == 0) {
-          STATUS = MAIN;
-        } else {
-          printf("[+] Command not found!\n");
-        }
-        break;
-      case CHOOSE:
-        input(command, ID_LEN);
-        if (strcmp(command,"q") == 0) {
-          STATUS = MAIN;
-        } else {
-          target_num = atoi(command);
-          printf("[+] id:%d\n", target_num);
-          if (target_num > 0) {
-            CHATTING_TO = target_num;
-            STATUS = ROOM;
-            refresh(sockfd, CHATTING_TO, 0, 0);
+      } 
+
+    } else if (pid == 0) {
+      fprintf(stderr, "child\n");
+      // child process
+      // init socket
+      int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+      struct sockaddr_in serverInfo;
+      bzero(&serverInfo, sizeof(serverInfo));
+      serverInfo.sin_family = PF_INET;
+      serverInfo.sin_addr.s_addr = inet_addr(hostname);
+      serverInfo.sin_port = htons(atoi(port));
+      int retval = connect(sockfd, (struct sockaddr *)&serverInfo, sizeof(serverInfo));
+      
+
+      //
+      //
+      //Weird part
+      //
+      //
+      // assert(retval >= 0);
+      if (retval < 0){
+        return -1;
+      }
+      //
+
+
+      fprintf(stderr, "Connection Success!\n");
+
+      // Some variable for chat room command
+      char* command = (char*)malloc(sizeof(char) * CMD_LEN);
+      char* username = (char*)malloc(sizeof(char) * USERNAME_LEN);
+      char* password = (char*)malloc(sizeof(char) * PASSWORD_LEN);
+      char* filename = (char*)malloc(sizeof(char) * FILE_LEN);
+      char* target = (char*)malloc(sizeof(char) * ID_LEN);
+      char* msg = (char*)malloc(sizeof(char) * MSG_LEN);
+      int target_num;
+
+      // Flag for ending while loop
+      int goodbye = 0;
+
+      // Chat room while
+      while (!goodbye) {
+        print_command_message();
+
+        switch(STATUS) {
+        case IDLE:
+          input(command, CMD_LEN);
+          if (strcmp (command, "s") == 0) {
+            printf("\n=========Sign Up==========\n\n");
+            printf("[+] username?\n[>]: ");
+            input(username, USERNAME_LEN);
+
+            printf("[+] password?\n[>]: ");
+            input(password, PASSWORD_LEN);
+
+            printf(" usr:%s pwd: %s\n", username, password);
+            sign_up(sockfd, username, password);
+          } else if (strcmp(command,"l") == 0) {
+            printf("\n==========Login===========\n\n");
+            printf("[+] username?\n[>]: ");
+            input(username, USERNAME_LEN);
+
+            printf("[+] password?\n[>]: ");
+            input(password, PASSWORD_LEN);
+
+            printf(" usr:%s pws: %s\n", username, password);
+            int status_code = login(sockfd, username, password);
+
+            if (status_code == 200) {
+              STATUS = MAIN;
+            }
+          } else if (strcmp(command,"g") == 0) {
+            printf("\n========PiePieChat========\n");
+            close(sockfd);
+            goodbye = 1;
+            printf("[+] ByeBye~~\n");
           } else {
-            fprintf(stderr, "[+] Target not found!\n");
+            printf("[+] Command not found!\n");
           }
-        }
-        break;
-      case ROOM:
-        input(msg, MSG_LEN);
-        if (strcmp(msg,"r") == 0) {
-          printf("\n=========Sign Up==========\n\n");
-          printf("\n=========Refresh==========\n\n");
-          refresh(sockfd, CHATTING_TO, 0, 0);
-        } else if (strcmp(msg,"u") == 0) {
-          //upload file
-          printf("\n=========Upload============\n\n");
-          printf("[+] filename?\n[>]: ");
-          input(filename, FILE_LEN);
+          break;
+        case MAIN:
+          input(command, CMD_LEN);
+          if (strcmp(command,"m") == 0) {
+            STATUS = CHOOSE;
+          } else if (strcmp(command, "x") == 0) {
+            //edit list
+          } else if (strcmp(command,"t") == 0) {
+            STATUS = LIST;
+          } else if (strcmp(command,"e") == 0) { 
+            STATUS = IDLE;
+            close(sockfd);
+            goodbye = 1;
+            printf("[+] ByeBye~~\n");
+          } else {
+            printf("[+] Command not found!\n");
+          }
+          break;
+        case LIST:
+          input(command, CMD_LEN);
+          if (strcmp(command,"m") == 0) {
+            STATUS = CHOOSE;
+          } else if (strcmp(command,"a") == 0) {
+            //show friends
+            printf("[+] Show user\n");
+            get_list(sockfd, 'a');
+          } else if (strcmp(command,"d") == 0) {
+            //show friends
+            get_list(sockfd, 'f');
+          } else if (strcmp(command,"b") == 0) {
+            //show blacklist
+            get_list(sockfd, 'b');
+          } else if (strcmp(command, "q") == 0) {
+            STATUS = MAIN;
+          } else {
+            printf("[+] Command not found!\n");
+          }
+          break;
+        case CHOOSE:
+          input(command, ID_LEN);
+          if (strcmp(command,"q") == 0) {
+            STATUS = MAIN;
+          } else {
+            target_num = atoi(command);
+            printf("[+] id:%d\n", target_num);
+            if (target_num > 0) {
+              CHATTING_TO = target_num;
+              STATUS = ROOM;
+              refresh(sockfd, CHATTING_TO, 0, 0);
+            } else {
+              fprintf(stderr, "[+] Target not found!\n");
+            }
+          }
+          break;
+        case ROOM:
+          input(msg, MSG_LEN);
+          if (strcmp(msg,"r") == 0) {
+            printf("\n=========Sign Up==========\n\n");
+            printf("\n=========Refresh==========\n\n");
+            refresh(sockfd, CHATTING_TO, 0, 0);
+          } else if (strcmp(msg,"u") == 0) {
+            //upload file
+            printf("\n=========Upload============\n\n");
+            printf("[+] filename?\n[>]: ");
+            input(filename, FILE_LEN);
 
-          printf(" filename: %s\n", filename);
-          int status_code = upload(sockfd, filename);
-        } else if (strcmp(msg,"f") == 0) {
-          //fetch file
-        } else if (strcmp(msg,"q") == 0) {
-          CHATTING_TO = 0;
-          STATUS = MAIN;
-        } else {
-          printf("[+] id:%d msg: %s\n", target_num, msg);
-          messaging(sockfd, CHATTING_TO, msg);
-          refresh(sockfd, CHATTING_TO, 0, 0);
+            printf(" filename: %s\n", filename);
+            int status_code = upload(sockfd, filename);
+          } else if (strcmp(msg,"f") == 0) {
+            //fetch file
+          } else if (strcmp(msg,"q") == 0) {
+            CHATTING_TO = 0;
+            STATUS = MAIN;
+          } else {
+            printf("[+] id:%d msg: %s\n", target_num, msg);
+            messaging(sockfd, CHATTING_TO, msg);
+            refresh(sockfd, CHATTING_TO, 0, 0);
+          }
+          break;
+        default:
+          printf("System Error [+]: state%d\n", STATUS);
+          break;
         }
-        break;
-      default:
-        printf("System Error [+]: state%d\n", STATUS);
-        break;
+
+        // printf("\033[%d;%dH", 0, 0);
+        // for (int i = 0; i < 100; i++) {
+        //   printf("\t\t\t\t\t\t\t\t\t\t\n");  
+        // }
+        // printf("\033[%d;%dH", 0, 0);
       }
-
-      // printf("\033[%d;%dH", 0, 0);
-      // for (int i = 0; i < 100; i++) {
-      //   printf("\t\t\t\t\t\t\t\t\t\t\n");  
-      // }
-      // printf("\033[%d;%dH", 0, 0);
+    } else {
+      fprintf(stderr, "Error!\n");
     }
-  } else {
-    fprintf(stderr, "Error!\n");
   }
   return 0;
 }
