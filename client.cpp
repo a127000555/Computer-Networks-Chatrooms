@@ -379,7 +379,7 @@ void refresh(int fd, int target, int start, int end)
   std::cout << "[+] " << state << std::endl;
   // std::cout << j["data"][0];
   int line_num = 0;
-  printf("\n=========Hist=========\n");
+  printf("\n===================Hist===================\n");
   for(auto x : j["data"]){
     // std::cout << x << std::endl;
     line_num = x[0].get<int>();
@@ -399,17 +399,18 @@ void refresh(int fd, int target, int start, int end)
     }
     
   }
-  printf("=======Hist END=======\n");
+  printf("=================Hist END=================\n");
 }
 
 void upload(int fd, int target, const char* filename)
 {
   std::ifstream ifs(filename);
-  std::string large_buffer_str( (std::istreambuf_iterator<char>(ifs) ),
-                       (std::istreambuf_iterator<char>()    ) );
-  ifs.close();      
-      
   if(ifs){
+    std::string large_buffer_str( (std::istreambuf_iterator<char>(ifs)),(std::istreambuf_iterator<char>()) );
+  
+    ifs.close();      
+      
+  
     // std::cout << "gg" << large_buffer_str << std::endl;
     std::string encoded_content_str = base64_encode(reinterpret_cast<const unsigned char*>(large_buffer_str.c_str()), large_buffer_str.length());
     // std::cout << encoded_content_str << std::endl;
@@ -440,8 +441,7 @@ void upload(int fd, int target, const char* filename)
     json j = json::parse(json_content_res);
     std::string state = j["state"].get<std::string>();
     std::cout << "[+] " << state << std::endl;
-    
-  } else{
+  } else {
     printf("[+] File not found!\n");
     return;     
   }
@@ -474,15 +474,19 @@ void download(int fd, int target, const char* filename, const char* filepath)
   // fprintf(stderr,"mes_len_res= %ld,json_content_res: %s\n",sz,json_content_res);
   json j = json::parse(json_content_res);
   std::string state = j["state"].get<std::string>();
-  std::string data = j["data"].get<std::string>();
-  std::string decoded_data = base64_decode(data);
+  int status_code = j["status_code"].get<int>();
 
-  std::ofstream out(filepath);
-  out << decoded_data;
-  out.close();
-  
-  printf("write end ");
   std::cout << "[+] " << state << std::endl;
+  if (status_code == 200) {
+    std::string data = j["data"].get<std::string>();
+    std::string decoded_data = base64_decode(data);
+
+    std::ofstream out(filepath);
+    out << decoded_data;
+    out.close();
+  
+    printf("write end ");
+  } 
 }
 
 void input(char *buf, size_t len) {
