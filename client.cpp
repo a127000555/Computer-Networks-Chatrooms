@@ -352,12 +352,11 @@ int main(int argc, char const *argv[])
   printf("Server is on %s:%s\n", hostname, port);
 
   while(1){
-    sleep(2);
     // fork for auto reconnect
     pid_t pid = fork();
     if (pid > 0) {
       // parent process
-      fprintf(stderr, "parent\n");
+      // fprintf(stderr, "parent\n");
       // init socket
       int monitor_sockfd = socket(AF_INET, SOCK_STREAM, 0);
       struct sockaddr_in serverInfo;
@@ -365,12 +364,12 @@ int main(int argc, char const *argv[])
       serverInfo.sin_family = PF_INET;
       serverInfo.sin_addr.s_addr = inet_addr(hostname);
       serverInfo.sin_port = htons(atoi(port));
-      int retval = connect(monitor_sockfd, (struct sockaddr *)&serverInfo, sizeof(serverInfo));
-      // assert(retval >= 0);
-      if(retval < 0) {
-        kill(pid, SIGKILL);
-        continue;
+      int retval;
+      while (1){
+        retval = connect(monitor_sockfd, (struct sockaddr *)&serverInfo, sizeof(serverInfo));
+        if (retval >= 0) break;
       }
+      assert(retval >= 0);
 
       // 宣告 select() 使用的資料結構
       fd_set readset;
@@ -380,8 +379,15 @@ int main(int argc, char const *argv[])
       struct timeval timeout;
       timeout.tv_sec = 0;
       timeout.tv_usec = 10;
-
+      int end_whole = 0;
+      // int end_process=0;
       while(1) {
+        int *status;
+        pid_t p = waitpid(pid, status, WNOHANG);
+        if (p != 0) {
+          end_whole = 1;
+          break;
+        }
         // 宣告select要用的working_readset
         FD_ZERO(&working_readset);
         memcpy(&working_readset, &readset, sizeof(fd_set));
@@ -393,15 +399,16 @@ int main(int argc, char const *argv[])
         } else if (!FD_ISSET(monitor_sockfd, &working_readset)){
           continue;
         } else {
-          fprintf(stderr, "\n[!] Server is down\n");
+          fprintf(stderr, "\n[!] Server is down!\n");
           kill(pid, SIGKILL);
           break;
         }
-      } 
+      }
+      if (end_whole) break; 
 
     } else if (pid == 0) {
-      fprintf(stderr, "child\n");
       // child process
+      // fprintf(stderr, "child\n");
       // init socket
       int sockfd = socket(AF_INET, SOCK_STREAM, 0);
       struct sockaddr_in serverInfo;
@@ -409,22 +416,14 @@ int main(int argc, char const *argv[])
       serverInfo.sin_family = PF_INET;
       serverInfo.sin_addr.s_addr = inet_addr(hostname);
       serverInfo.sin_port = htons(atoi(port));
-      int retval = connect(sockfd, (struct sockaddr *)&serverInfo, sizeof(serverInfo));
-      
-
-      //
-      //
-      //Weird part
-      //
-      //
-      // assert(retval >= 0);
-      if (retval < 0){
-        return -1;
+      int retval;
+      while (1) {
+        retval = connect(sockfd, (struct sockaddr *)&serverInfo, sizeof(serverInfo));
+        if (retval >= 0) break;
       }
-      //
+      assert(retval >= 0);
 
-
-      fprintf(stderr, "Connection Success!\n");
+      fprintf(stderr, "[!] Connection Success!\n");
 
       // Some variable for chat room command
       char* command = (char*)malloc(sizeof(char) * CMD_LEN);
@@ -434,7 +433,7 @@ int main(int argc, char const *argv[])
       char* target = (char*)malloc(sizeof(char) * ID_LEN);
       char* msg = (char*)malloc(sizeof(char) * MSG_LEN);
       int target_num;
-
+      
       // Flag for ending while loop
       int goodbye = 0;
 
@@ -567,6 +566,7 @@ int main(int argc, char const *argv[])
         // }
         // printf("\033[%d;%dH", 0, 0);
       }
+      break;
     } else {
       fprintf(stderr, "Error!\n");
     }
