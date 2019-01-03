@@ -32,6 +32,7 @@
 #define FILE_LEN 100
 #define MSG_LEN 1024
 #define CMD_LEN 10
+#define LINE_NUM_LEN 32
 #define ID_LEN 9
 
 #define IDLE 0
@@ -39,6 +40,7 @@
 #define LIST 2
 #define CHOOSE 3
 #define ROOM 4
+#define EDIT 5
 
 using json = nlohmann::json;
 
@@ -58,7 +60,9 @@ struct user_info{
 };
 
 int STATUS=IDLE;   //status
-int CHATTING_TO; //chat to who
+int CHATTING_TO; //id of who is chatting to
+std::string MYNAME; //name of user
+std::string CHATTING_TO_NAME;
 
 void print_command_message()
 {
@@ -76,14 +80,14 @@ void print_command_message()
       printf("\n========PiePieChat========\n\n");
       printf("[?] m - messaging\n");
       printf("[?] t - show lists\n");
-      printf("[?] x - edit friend/black list -> not\n");
-      printf("[?] e - logout -> maybe don't have to close process\n");
+      printf("[?] x - edit friend/black list\n");
+      printf("[?] g - good bye\n");
       printf("[+] Command?\n[>]: ");
       break;
     case LIST:
       printf("\n==========Lists===========\n\n");
       printf("[?] a - show users\n"); 
-      printf("[?] d - show friends\n");
+      printf("[?] f - show friends\n");
       printf("[?] b - show black list\n");
       printf("[?] m - messaging\n");
       printf("[?] q - quit\n");
@@ -104,6 +108,14 @@ void print_command_message()
       printf("[?] r - refresh\n");
       printf("[?] q - quit\n");
       printf("[+] MSG or Command?\n[>]: ");
+      break;
+    case EDIT:
+      printf("\n===========Edit===========\n\n");
+      printf("[?] f - edit friends\n");
+      printf("[?] b - edit black list\n");
+      printf("[?] m - messaging\n");
+      printf("[?] q - quit\n");
+      printf("[+] Command?\n[>]: ");
       break;
     default:
       printf("System Error [+]: status%d\n", STATUS);
@@ -229,6 +241,44 @@ void get_list(int fd, char target) {
 
 }
 
+void edit_list(int fd, const char* op, const char* list, int target)
+{
+  json j_req;
+  j_req["target_id"] = target; j_req["target_list"]=list; 
+  if (strcmp(op, "a") == 0) {
+    j_req["op"]="add";
+  } else if (strcmp(op, "d") == 0) {
+    j_req["op"]="delete";
+  } else {
+    printf("[+] Command not found!\n");
+    return;
+  }
+  std::string json_content_req = j_req.dump();
+
+  unsigned long long msg_len_req = json_content_req.length();
+  char uni_pkt_req[10]="x";
+  *(unsigned long long *)(uni_pkt_req+1) = msg_len_req;
+  send(fd,uni_pkt_req,9,0);
+  send(fd,json_content_req.c_str(), msg_len_req, 0);
+
+  char uni_pkt_res[10];
+  ssize_t sz = recv(fd,uni_pkt_res,9,0);
+  if (sz == 0){
+    return;
+  }
+  // fprintf(stderr,"%s\n",uni_pkt_res);
+  unsigned long long mes_len_res = *((unsigned long long *)(uni_pkt_res+1));
+  printf("mes_len_res = %llu\n", mes_len_res);
+
+  char json_content_res[mes_len_res]={'\0'};
+  sz = recv(fd,json_content_res,mes_len_res,0);
+  json_content_res[sz] = 0;
+  // fprintf(stderr,"mes_len_res= %ld,json_content_res: %s\n",sz,json_content_res);
+  json j = json::parse(json_content_res);
+  std::string state = j["state"].get<std::string>();
+  std::cout << "[+] " << state << std::endl;
+}
+
 std::string endecrypt(std::string msg)
 {
   for(char& c : msg) {
@@ -274,6 +324,48 @@ void messaging(int fd, int target, char* message)
   std::cout << "[+] " << state << std::endl;;
 }
 
+std::string id_2_name(int fd, int target)
+{
+  char json_content_req[MAX_DATALEN];
+  sprintf(json_content_req,"{\"target\":%d}",target);
+  unsigned long long msg_len_req = strlen(json_content_req);
+  char uni_pkt_req[10]="t";
+  *(unsigned long long *)(uni_pkt_req+1) = msg_len_req;
+  send(fd,uni_pkt_req,9,0);
+  send(fd,json_content_req, msg_len_req,0);
+
+  char uni_pkt_res[10];
+  ssize_t sz = recv(fd,uni_pkt_res,9,0);
+
+  std::string username = "user" + std::to_string(target);;
+  if (sz == 0){
+    return username;
+  }
+    // fprintf(stderr,"%s\n",uni_pkt_res);
+  unsigned long long mes_len_res = *((unsigned long long *)(uni_pkt_res+1));
+  char json_content_res[mes_len_res]={'\0'};
+  sz = recv(fd,json_content_res,mes_len_res,0);
+  json_content_res[sz] = 0;
+  // fprintf(stderr,"mes_len_res= %ld,json_content_res: %s\n",sz,json_content_res);
+  json j = json::parse(json_content_res);
+  int status_code = j["status_code"].get<int>();
+  
+  if (status_code == 200) {
+    username =  j["data"].get<std::string>();
+  }
+  return username;
+  
+}
+
+std::string who_name(int id) 
+{
+  if (id == CHATTING_TO) {
+    return CHATTING_TO_NAME;
+  } else {
+    return MYNAME;
+  }
+}
+
 void refresh(int fd, int target, int start, int end) 
 {
   char json_content_req[MAX_DATALEN];
@@ -313,7 +405,8 @@ void refresh(int fd, int target, int start, int end)
     decoded_message = endecrypt(decoded_message);
 
     int who = x[1]["who"].get<int>();
-    std::cout << "[" << line_num << "]user" << who << ": " << decoded_message << std::endl;
+    std::string username = who_name(who);
+    std::cout << "[" << line_num << "]" << username << ": " << decoded_message << std::endl;
   }
 }
 
@@ -427,6 +520,7 @@ int main(int argc, char const *argv[])
 
       // Some variable for chat room command
       char* command = (char*)malloc(sizeof(char) * CMD_LEN);
+      char* action = (char*)malloc(sizeof(char) * CMD_LEN);
       char* username = (char*)malloc(sizeof(char) * USERNAME_LEN);
       char* password = (char*)malloc(sizeof(char) * PASSWORD_LEN);
       char* filename = (char*)malloc(sizeof(char) * FILE_LEN);
@@ -467,6 +561,7 @@ int main(int argc, char const *argv[])
 
             if (status_code == 200) {
               STATUS = MAIN;
+              MYNAME.assign(username); // store my name
             }
           } else if (strcmp(command,"g") == 0) {
             printf("\n========PiePieChat========\n");
@@ -482,10 +577,10 @@ int main(int argc, char const *argv[])
           if (strcmp(command,"m") == 0) {
             STATUS = CHOOSE;
           } else if (strcmp(command, "x") == 0) {
-            //edit list
+            STATUS = EDIT;
           } else if (strcmp(command,"t") == 0) {
             STATUS = LIST;
-          } else if (strcmp(command,"e") == 0) { 
+          } else if (strcmp(command,"g") == 0) { 
             STATUS = IDLE;
             close(sockfd);
             goodbye = 1;
@@ -502,7 +597,7 @@ int main(int argc, char const *argv[])
             //show friends
             printf("[+] Show user\n");
             get_list(sockfd, 'a');
-          } else if (strcmp(command,"d") == 0) {
+          } else if (strcmp(command,"f") == 0) {
             //show friends
             get_list(sockfd, 'f');
           } else if (strcmp(command,"b") == 0) {
@@ -521,10 +616,11 @@ int main(int argc, char const *argv[])
           } else {
             target_num = atoi(command);
             printf("[+] id:%d\n", target_num);
-            if (target_num > 0) {
+            if (target_num >= 0) {
               CHATTING_TO = target_num;
+              CHATTING_TO_NAME = id_2_name(sockfd, CHATTING_TO);
               STATUS = ROOM;
-              refresh(sockfd, CHATTING_TO, 0, 0);
+              refresh(sockfd, CHATTING_TO, -10, -1);
             } else {
               fprintf(stderr, "[+] Target not found!\n");
             }
@@ -533,9 +629,9 @@ int main(int argc, char const *argv[])
         case ROOM:
           input(msg, MSG_LEN);
           if (strcmp(msg,"r") == 0) {
-            printf("\n=========Sign Up==========\n\n");
             printf("\n=========Refresh==========\n\n");
-            refresh(sockfd, CHATTING_TO, 0, 0);
+
+            refresh(sockfd, CHATTING_TO, 0, -1);
           } else if (strcmp(msg,"u") == 0) {
             //upload file
             printf("\n=========Upload============\n\n");
@@ -552,7 +648,50 @@ int main(int argc, char const *argv[])
           } else {
             printf("[+] id:%d msg: %s\n", target_num, msg);
             messaging(sockfd, CHATTING_TO, msg);
-            refresh(sockfd, CHATTING_TO, 0, 0);
+            refresh(sockfd, CHATTING_TO, -10, -1);
+          }
+          break;
+        case EDIT:
+          input(command, CMD_LEN);
+          if (strcmp(command,"m") == 0) {
+            STATUS = CHOOSE;
+          } else if (strcmp(command,"f") == 0) {
+            printf("\n=========Friends==========\n\n");
+            printf("[?] a - add someone\n");
+            printf("[?] d - delete someone\n");
+            printf("[+] Command?\n[>]: ");
+            input(action, CMD_LEN);
+
+            printf("[+] ID?\n[>]: ");
+            input(target, ID_LEN);
+
+            target_num = atoi(target);
+            if (target_num >= 0) {
+              edit_list(sockfd, action, "friend", target_num);
+              get_list(sockfd, 'f');
+            } else {
+              fprintf(stderr, "[+] Target not found!\n");
+            }
+          } else if (strcmp(command,"b") == 0) {
+            printf("\n==========Black===========\n\n");
+            printf("[?] a - add someone\n");
+            printf("[?] d - delete someone\n");
+            printf("[+] Command?\n[>]: ");
+            input(action, CMD_LEN);
+            printf("[+] ID?\n[>]: ");
+            input(target, ID_LEN);
+
+            target_num = atoi(target);
+            if (target_num >= 0) {
+              edit_list(sockfd, action, "black", target_num);
+              get_list(sockfd, 'b');
+            } else {
+              fprintf(stderr, "[+] Target not found!\n");
+            }
+          } else if (strcmp(command, "q") == 0) {
+            STATUS = MAIN;
+          } else {
+            printf("[+] Command not found!\n");
           }
           break;
         default:
