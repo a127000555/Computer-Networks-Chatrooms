@@ -227,7 +227,7 @@ void get_list(int fd, char target) {
   json_content_res[sz] = 0;
   // fprintf(stderr,"mes_len_res= %ld,json_content_res: %s\n",sz,json_content_res);
   json j = json::parse(json_content_res);
-  std::cout << j << std::endl;
+  // std::cout << j << std::endl;
 
   int id = 0;
   printf("\n=========List=========\n");
@@ -394,6 +394,7 @@ void refresh(int fd, int target, int start, int end)
   std::cout << "[+] " << state << std::endl;
   // std::cout << j["data"][0];
   int line_num = 0;
+  printf("\n=========Hist=========\n");
   for(auto x : j["data"]){
     // std::cout << x << std::endl;
     line_num = x[0].get<int>();
@@ -408,6 +409,7 @@ void refresh(int fd, int target, int start, int end)
     std::string username = who_name(who);
     std::cout << "[" << line_num << "]" << username << ": " << decoded_message << std::endl;
   }
+  printf("=======Hist END=======\n");
 }
 
 int upload(int fd,  const char* filename)
@@ -418,6 +420,15 @@ int upload(int fd,  const char* filename)
 void input(char *buf, size_t len) {
   int val = getline(&buf, &len, stdin)-1;
   buf[val] = '\0';
+}
+
+void flush_screen()
+{
+  printf("\033[%d;%dH", 0, 0);
+  for (int i = 0; i < 200; i++) {
+    printf("\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\n");  
+  }
+  printf("\033[%d;%dH", 0, 0);
 }
 
 int main(int argc, char const *argv[])
@@ -515,7 +526,6 @@ int main(int argc, char const *argv[])
         if (retval >= 0) break;
       }
       assert(retval >= 0);
-
       fprintf(stderr, "[!] Connection Success!\n");
 
       // Some variable for chat room command
@@ -545,6 +555,7 @@ int main(int argc, char const *argv[])
 
             printf("[+] password?\n[>]: ");
             input(password, PASSWORD_LEN);
+            flush_screen();
 
             printf(" usr:%s pwd: %s\n", username, password);
             sign_up(sockfd, username, password);
@@ -555,6 +566,7 @@ int main(int argc, char const *argv[])
 
             printf("[+] password?\n[>]: ");
             input(password, PASSWORD_LEN);
+            flush_screen();
 
             printf(" usr:%s pws: %s\n", username, password);
             int status_code = login(sockfd, username, password);
@@ -574,6 +586,8 @@ int main(int argc, char const *argv[])
           break;
         case MAIN:
           input(command, CMD_LEN);
+          flush_screen();
+
           if (strcmp(command,"m") == 0) {
             STATUS = CHOOSE;
           } else if (strcmp(command, "x") == 0) {
@@ -591,11 +605,12 @@ int main(int argc, char const *argv[])
           break;
         case LIST:
           input(command, CMD_LEN);
+          flush_screen();
+
           if (strcmp(command,"m") == 0) {
             STATUS = CHOOSE;
           } else if (strcmp(command,"a") == 0) {
             //show friends
-            printf("[+] Show user\n");
             get_list(sockfd, 'a');
           } else if (strcmp(command,"f") == 0) {
             //show friends
@@ -611,6 +626,8 @@ int main(int argc, char const *argv[])
           break;
         case CHOOSE:
           input(command, ID_LEN);
+          flush_screen();
+
           if (strcmp(command,"q") == 0) {
             STATUS = MAIN;
           } else {
@@ -628,6 +645,8 @@ int main(int argc, char const *argv[])
           break;
         case ROOM:
           input(msg, MSG_LEN);
+          flush_screen();
+
           if (strcmp(msg,"r") == 0) {
             printf("\n=========Refresh==========\n\n");
 
@@ -645,14 +664,18 @@ int main(int argc, char const *argv[])
           } else if (strcmp(msg,"q") == 0) {
             CHATTING_TO = 0;
             STATUS = MAIN;
-          } else {
+          } else if (strlen(msg) != 0){
             printf("[+] id:%d msg: %s\n", target_num, msg);
             messaging(sockfd, CHATTING_TO, msg);
+            refresh(sockfd, CHATTING_TO, -10, -1);
+          } else {
             refresh(sockfd, CHATTING_TO, -10, -1);
           }
           break;
         case EDIT:
           input(command, CMD_LEN);
+          flush_screen();
+
           if (strcmp(command,"m") == 0) {
             STATUS = CHOOSE;
           } else if (strcmp(command,"f") == 0) {
@@ -664,6 +687,8 @@ int main(int argc, char const *argv[])
 
             printf("[+] ID?\n[>]: ");
             input(target, ID_LEN);
+            flush_screen();
+
 
             target_num = atoi(target);
             if (target_num >= 0) {
@@ -680,6 +705,7 @@ int main(int argc, char const *argv[])
             input(action, CMD_LEN);
             printf("[+] ID?\n[>]: ");
             input(target, ID_LEN);
+            flush_screen();
 
             target_num = atoi(target);
             if (target_num >= 0) {
@@ -698,12 +724,6 @@ int main(int argc, char const *argv[])
           printf("System Error [+]: state%d\n", STATUS);
           break;
         }
-
-        // printf("\033[%d;%dH", 0, 0);
-        // for (int i = 0; i < 100; i++) {
-        //   printf("\t\t\t\t\t\t\t\t\t\t\n");  
-        // }
-        // printf("\033[%d;%dH", 0, 0);
       }
       break;
     } else {
