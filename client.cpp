@@ -22,6 +22,8 @@
 #include <netdb.h>
 #include <iomanip>
 
+#include <fstream>
+
 #include "json.hpp"
 #include "base64.h"
 
@@ -44,21 +46,6 @@
 
 using json = nlohmann::json;
 
-struct user_info{
-  int user_id;
-  std::string user_name;
-  std::string user_password;
-  std::set<std::string> friend_list;
-  std::set<std::string> black_list;
-  user_info(int _id,std::string _user,std::string _user_password){
-    user_id = _id;
-    user_name = _user;
-    user_password = _user_password;
-    friend_list.clear();
-    black_list.clear();
-  }
-};
-
 int STATUS=IDLE;   //status
 int CHATTING_TO; //id of who is chatting to
 std::string MYNAME; //name of user
@@ -66,8 +53,6 @@ std::string CHATTING_TO_NAME;
 
 void print_command_message()
 {
-  // printf("\n=after status=%d\n", STATUS);
-
   switch(STATUS) {
     case IDLE:
       printf("\n========PiePieChat========\n\n");
@@ -104,7 +89,7 @@ void print_command_message()
       printf("\n===========Chat===========\n\n");
       printf("[?] \"msg\" - sending messaging\n");
       printf("[?] u - upload file\n");
-      printf("[?] f - fetch file\n");
+      printf("[?] d - download file\n");
       printf("[?] r - refresh\n");
       printf("[?] q - quit\n");
       printf("[+] MSG or Command?\n[>]: ");
@@ -321,7 +306,7 @@ void messaging(int fd, int target, char* message)
   // fprintf(stderr,"mes_len_res= %ld,json_content_res: %s\n",sz,json_content_res);
   json j = json::parse(json_content_res);
   std::string state = j["state"].get<std::string>();
-  std::cout << "[+] " << state << std::endl;;
+  std::cout << "[+] " << state << std::endl;
 }
 
 std::string id_2_name(int fd, int target)
@@ -398,23 +383,106 @@ void refresh(int fd, int target, int start, int end)
   for(auto x : j["data"]){
     // std::cout << x << std::endl;
     line_num = x[0].get<int>();
+    std::string type = x[1]["type"].get<std::string>();
     std::string message = x[1]["message"].get<std::string>();
-
-    //base64 decode
-    std::string decoded_message = base64_decode(message);
-    //decrypt
-    decoded_message = endecrypt(decoded_message);
-
     int who = x[1]["who"].get<int>();
     std::string username = who_name(who);
-    std::cout << "[" << line_num << "]" << username << ": " << decoded_message << std::endl;
+
+    if (type == "message") {
+      //base64 decode
+      std::string decoded_message = base64_decode(message);
+      //decrypt
+      decoded_message = endecrypt(decoded_message);  
+      std::cout << "[" << line_num << "]" << username << ": " << decoded_message << std::endl;
+    } else {
+      std::cout << "[" << line_num << "]" << "a file is uploaded by " << username << "! ("<< message<<")" << std::endl;
+    }
+    
   }
   printf("=======Hist END=======\n");
 }
 
-int upload(int fd,  const char* filename)
+void upload(int fd, int target, const char* filename)
 {
-  return 0;
+  std::ifstream ifs(filename);
+  std::string large_buffer_str( (std::istreambuf_iterator<char>(ifs) ),
+                       (std::istreambuf_iterator<char>()    ) );
+  ifs.close();      
+      
+  if(ifs){
+    // std::cout << "gg" << large_buffer_str << std::endl;
+    std::string encoded_content_str = base64_encode(reinterpret_cast<const unsigned char*>(large_buffer_str.c_str()), large_buffer_str.length());
+    // std::cout << encoded_content_str << std::endl;
+    
+    json j_req;
+    j_req["target"] = target; j_req["filename"]=filename; j_req["data"]=encoded_content_str;
+    std::string json_content_req = j_req.dump();
+
+    unsigned long long msg_len_req = json_content_req.length();
+    char uni_pkt_req[10]="u";
+    *(unsigned long long *)(uni_pkt_req+1) = msg_len_req;
+    send(fd,uni_pkt_req,9,0);
+    send(fd,json_content_req.c_str(), msg_len_req, 0); 
+
+    char uni_pkt_res[10];
+    ssize_t sz = recv(fd,uni_pkt_res,9,0);
+    if (sz == 0){
+      return;
+    }
+    // fprintf(stderr,"%s\n",uni_pkt_res);
+    unsigned long long mes_len_res = *((unsigned long long *)(uni_pkt_res+1));
+    printf("mes_len_res = %llu\n", mes_len_res);
+
+    char json_content_res[mes_len_res]={'\0'};
+    sz = recv(fd,json_content_res,mes_len_res,0);
+    json_content_res[sz] = 0;
+    // fprintf(stderr,"mes_len_res= %ld,json_content_res: %s\n",sz,json_content_res);
+    json j = json::parse(json_content_res);
+    std::string state = j["state"].get<std::string>();
+    std::cout << "[+] " << state << std::endl;
+    
+  } else{
+    printf("[+] File not found!\n");
+    return;     
+  }
+}
+
+void download(int fd, int target, const char* filename, const char* filepath)
+{
+  json j_req;
+  j_req["target"] = target; j_req["filename"]=filename;
+  std::string json_content_req = j_req.dump();
+
+  unsigned long long msg_len_req = json_content_req.length();
+  char uni_pkt_req[10]="d";
+  *(unsigned long long *)(uni_pkt_req+1) = msg_len_req;
+  send(fd,uni_pkt_req,9,0);
+  send(fd,json_content_req.c_str(), msg_len_req, 0); 
+
+  char uni_pkt_res[10];
+  ssize_t sz = recv(fd,uni_pkt_res,9,0);
+  if (sz == 0){
+    return;
+  }
+  // fprintf(stderr,"%s\n",uni_pkt_res);
+  unsigned long long mes_len_res = *((unsigned long long *)(uni_pkt_res+1));
+  printf("mes_len_res = %llu\n", mes_len_res);
+
+  char json_content_res[mes_len_res]={'\0'};
+  sz = recv(fd,json_content_res,mes_len_res,0);
+  json_content_res[sz] = 0;
+  // fprintf(stderr,"mes_len_res= %ld,json_content_res: %s\n",sz,json_content_res);
+  json j = json::parse(json_content_res);
+  std::string state = j["state"].get<std::string>();
+  std::string data = j["data"].get<std::string>();
+  std::string decoded_data = base64_decode(data);
+
+  std::ofstream out(filepath);
+  out << decoded_data;
+  out.close();
+  
+  printf("write end ");
+  std::cout << "[+] " << state << std::endl;
 }
 
 void input(char *buf, size_t len) {
@@ -534,6 +602,7 @@ int main(int argc, char const *argv[])
       char* username = (char*)malloc(sizeof(char) * USERNAME_LEN);
       char* password = (char*)malloc(sizeof(char) * PASSWORD_LEN);
       char* filename = (char*)malloc(sizeof(char) * FILE_LEN);
+      char* filepath = (char*)malloc(sizeof(char) * FILE_LEN);
       char* target = (char*)malloc(sizeof(char) * ID_LEN);
       char* msg = (char*)malloc(sizeof(char) * MSG_LEN);
       int target_num;
@@ -658,9 +727,16 @@ int main(int argc, char const *argv[])
             input(filename, FILE_LEN);
 
             printf(" filename: %s\n", filename);
-            int status_code = upload(sockfd, filename);
-          } else if (strcmp(msg,"f") == 0) {
-            //fetch file
+            upload(sockfd, CHATTING_TO, filename);
+          } else if (strcmp(msg,"d") == 0) {
+            printf("\n========Download===========\n\n");
+            printf("[+] filename?\n[>]: ");
+            input(filename, FILE_LEN);
+            printf("[+] where to store?\n[>]: ");
+            input(filepath, FILE_LEN);
+
+            printf(" filepath: %s\n", filepath);
+            download(sockfd, CHATTING_TO, filename, filepath);
           } else if (strcmp(msg,"q") == 0) {
             CHATTING_TO = 0;
             STATUS = MAIN;
