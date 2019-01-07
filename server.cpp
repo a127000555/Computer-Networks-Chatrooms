@@ -11,6 +11,7 @@
 #include "global_variables.hpp"
 #include "file_interface.hpp"
 #include "respond.hpp"
+char large_buffer[1 << 23];
 std::string string_to_sha256(std::string src_str){
 	std::vector<unsigned char> hash(picosha2::k_digest_size);
 	picosha2::hash256(src_str.begin(), src_str.end(), hash.begin(), hash.end());
@@ -219,17 +220,16 @@ void download_file(int fd,int len){
 	}else{
 		FILE *fin = fopen(filepath.c_str(),"r");
 		if(fin){
-			char *large_buffer = (char*) malloc(1<<20);
 			retval = fscanf(fin,"%s",large_buffer);
-			puts(large_buffer);
+			// puts(large_buffer);
 			fclose(fin);
 			response_client(fd,200,"OK: Download successfully.",std::string(large_buffer));	
-			free(large_buffer);	
 		}else{
 			response_client(fd,404,"File Not Found.",{});	
 
 		}
 	}
+	puts("download finish");
 }
 
 void refresh(int fd,int len){

@@ -20,8 +20,8 @@ def protocol_pkt(operation, content):
 def wait_response(clientSocket):
 	s = clientSocket.recv(9)
 	l = u64(s[1:])
-	s = clientSocket.recv(l)
-	print('recv:' , s)
+	s = clientSocket.recv(l,MSG_WAITALL)
+	# print('recv:' , s)
 	j = json.loads(s.decode())
 	return j
 
