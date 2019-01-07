@@ -43,11 +43,13 @@
 #define CHOOSE 3
 #define ROOM 4
 #define EDIT 5
+#define REFRESH 6
 
 using json = nlohmann::json;
 
 int STATUS=IDLE;   //status
 int CHATTING_TO; //id of who is chatting to
+int REFRESH_BASE=0;
 std::string MYNAME; //name of user
 std::string CHATTING_TO_NAME;
 
@@ -99,6 +101,13 @@ void print_command_message()
       printf("[?] f - edit friends\n");
       printf("[?] b - edit black list\n");
       printf("[?] m - messaging\n");
+      printf("[?] q - quit\n");
+      printf("[+] Command?\n[>]: ");
+      break;
+    case REFRESH:
+      printf("\n==========Refresh==========\n\n");
+      printf("[?] u - older history\n");
+      printf("[?] d - newer history/\n");
       printf("[?] q - quit\n");
       printf("[+] Command?\n[>]: ");
       break;
@@ -721,9 +730,8 @@ int main(int argc, char const *argv[])
           flush_screen();
 
           if (strcmp(msg,"r") == 0) {
-            printf("\n=========Refresh==========\n\n");
-
-            refresh(sockfd, CHATTING_TO, 0, -1);
+            STATUS = REFRESH;
+            refresh(sockfd, CHATTING_TO, -10, -1);
           } else if (strcmp(msg,"u") == 0) {
             //upload file
             printf("\n=========Upload============\n\n");
@@ -799,6 +807,24 @@ int main(int argc, char const *argv[])
           } else {
             printf("[+] Command not found!\n");
           }
+          break;
+        case REFRESH:
+          input(command, CMD_LEN);
+          flush_screen();
+          if (strcmp(command, "u") == 0) {
+            REFRESH_BASE = REFRESH_BASE + 1;
+            refresh(sockfd, CHATTING_TO, -(10+REFRESH_BASE), -(1+REFRESH_BASE));
+          } else if (strcmp(command, "d") == 0) {
+            REFRESH_BASE = REFRESH_BASE - 1;
+            refresh(sockfd, CHATTING_TO, -(10+REFRESH_BASE), -(1+REFRESH_BASE));
+          } else if (strcmp(command, "q") == 0) {
+            REFRESH_BASE = 0;
+            STATUS = MAIN;
+          } else {
+            printf("[+] Command not found!\n");
+          }
+          break;
+
           break;
         default:
           printf("System Error [+]: state%d\n", STATUS);
