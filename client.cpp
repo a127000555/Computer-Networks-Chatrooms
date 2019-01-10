@@ -478,7 +478,7 @@ void download(int fd, int target, const char* filename, const char* filepath)
   printf("mes_len_res = %llu\n", mes_len_res);
 
   char json_content_res[mes_len_res]={'\0'};
-  sz = recv(fd,json_content_res,mes_len_res,0);
+  sz = recv(fd,json_content_res,mes_len_res,MSG_WAITALL);
   json_content_res[sz] = 0;
   // fprintf(stderr,"mes_len_res= %ld,json_content_res: %s\n",sz,json_content_res);
   json j = json::parse(json_content_res);
@@ -493,8 +493,6 @@ void download(int fd, int target, const char* filename, const char* filepath)
     std::ofstream out(filepath);
     out << decoded_data;
     out.close();
-  
-    printf("write end ");
   } 
 }
 
